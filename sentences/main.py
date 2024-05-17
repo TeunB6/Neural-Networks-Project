@@ -9,10 +9,11 @@ def train_new(name):
 
     raw_sentences = []
 
-    for file in os.listdir(path):
-        fp = os.path.join(path, file)
-        with open(fp, 'r') as f:
-            raw_sentences += [line.strip() for line in f.readlines()]
+    file = "crazy.txt" # fill in data file you want to train on here
+    
+    fp = os.path.join(path, file)
+    with open(fp, 'r') as f:
+        raw_sentences += [line.strip() for line in f.readlines()]
 
     def extract_data(sentences: list[str]) -> tuple[list[str], list[str]]:
         strings, chars = [], []

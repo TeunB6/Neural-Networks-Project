@@ -3,7 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import random
 import matplotlib.pyplot as plt
-all_letters = "abcdefghijklmnopqrstuvwxyz. "
+all_letters = "abcdefghijklmnopqrstuvwxyz,.?!' "
+end_char = ".?!"
 num_letters = len(all_letters)
 
 class RecurrentNeuralNetwork(nn.Module):
@@ -24,15 +25,15 @@ class RecurrentNeuralNetwork(nn.Module):
 
 class SentenceModel:
     def __init__(self, hidden_size: int = 128,
-                 lr: float = 0.005
-                 ) -> None:
-        self.model = RecurrentNeuralNetwork(num_letters, hidden_size, num_letters)
+                 lr: float = 0.005,
+                 vocab: str = all_letters) -> None:
         self.hidden_size = hidden_size
         self.lr = lr
         self.loss_function = nn.NLLLoss()
         self.init_hidden()
-        
-    @staticmethod
+        self.model = RecurrentNeuralNetwork(num_letters, hidden_size, num_letters)
+    
+      
     def char_to_tensor_out(char: str):
         if type(char) != str:
             raise TypeError(f"confusion: char {char} is not a str but {type(char)}")
@@ -42,19 +43,17 @@ class SentenceModel:
         char_index = all_letters.find(char)
         return torch.tensor([char_index])
 
-    @staticmethod
-    def char_to_tensor_in(char: str):
+    def char_to_tensor(self, char: str):
         tensor = torch.zeros(1, num_letters)
         char_index = all_letters.find(char)
         tensor[0][char_index] = 1
         return tensor
     
-    @staticmethod
-    def string_to_tensor(string: str):
+    def string_to_tensor(self, string: str):
         tensor = torch.zeros(len(string), 1, num_letters)
         
         for li, char in enumerate(string):
-            tensor[li] = SentenceModel.char_to_tensor_in(char)
+            tensor[li] = self.char_to_tensor(char)
         
         return tensor
 
@@ -65,23 +64,44 @@ class SentenceModel:
         self.init_hidden()
         with torch.no_grad():
             for char in string[:-1]:
-                char_t = self.char_to_tensor_in(char)
+                char_t = self.char_to_tensor(char)
                 _, self.hidden = self.model.forward(char_t, self.hidden)
             
             while True:
-                char_t = self.char_to_tensor_in(string[-1])
+                char_t = self.char_to_tensor(string[-1])
                 o, self.hidden = self.model.forward(char_t, self.hidden)
                 next_char_idx = torch.argmax(o)
                 next_char = all_letters[next_char_idx]
                 string += next_char
-                if next_char == '.':
+                if next_char in end_char:
                     return string
+                if next_char == ',':
+                    print(string)
+    
+    def predict_continuous(self, string: str) -> str:
+        import time
+        
+        self.init_hidden()
+        with torch.no_grad():
+            for char in string[:-1]:
+                char_t = self.char_to_tensor(char)
+                _, self.hidden = self.model.forward(char_t, self.hidden)
+            
+            last_char = string[-1]
+            for _ in range(10000):
+                char_t = self.char_to_tensor(last_char)
+                o, self.hidden = self.model.forward(char_t, self.hidden)
+                char_idx = torch.argmax(o)
+                char = all_letters[char_idx]
+                print(char, end='', flush=True)
+                time.sleep(0.1)
+                last_char = char
     
     def predict_char(self, string: str) -> str:
         self.init_hidden()
         with torch.no_grad():
             for char in string:
-                char_t = self.char_to_tensor_in(char)
+                char_t = self.char_to_tensor(char)
                 o, self.hidden = self.model.forward(char_t, self.hidden)
             next_char = all_letters[torch.argmax(o)]
         return next_char
@@ -113,7 +133,8 @@ class SentenceModel:
         try:
             for iter, (string, next_char) in enumerate(data):
                 string_tensor = self.string_to_tensor(string)
-                char_tensor = self.char_to_tensor_out(next_char)                
+                char_index = all_letters.find(next_char) 
+                char_tensor = torch.tensor([char_index])             
                 o, loss = self._train_sample(string_tensor, char_tensor)
                 
                 if iter % 100 == 0:
