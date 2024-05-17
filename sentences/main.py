@@ -16,11 +16,11 @@ def train_new(name):
         raw_sentences += [line.strip() for line in f.readlines()]
 
     def extract_data(sentences: list[str]) -> tuple[list[str], list[str]]:
-        size_threshold = 5 # min is 2
+        size_threshold = 5 # min is 2 : large, small and crazy were all trained with size_threshold = 2
         
         strings, chars = [], []
         for s in sentences:
-            sub_strings = [s[i:j] for i, j in combinations(range(len(s) + 1), r=2) if len(s[i:j]) >= 5] 
+            sub_strings = [s[i:j] for i, j in combinations(range(len(s) + 1), r=2) if len(s[i:j]) >= size_threshold] 
             for sub in sub_strings:
                 strings.append(sub[:-1])
                 chars.append(sub[-1])
