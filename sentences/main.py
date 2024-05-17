@@ -16,9 +16,11 @@ def train_new(name):
         raw_sentences += [line.strip() for line in f.readlines()]
 
     def extract_data(sentences: list[str]) -> tuple[list[str], list[str]]:
+        size_threshold = 5 # min is 2
+        
         strings, chars = [], []
         for s in sentences:
-            sub_strings = [s[i:j] for i, j in combinations(range(len(s) + 1), r=2) if len(s[i:j]) >= 2]
+            sub_strings = [s[i:j] for i, j in combinations(range(len(s) + 1), r=2) if len(s[i:j]) >= 5] 
             for sub in sub_strings:
                 strings.append(sub[:-1])
                 chars.append(sub[-1])
@@ -26,7 +28,7 @@ def train_new(name):
 
     X, y = extract_data(raw_sentences)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
-    model = SentenceModel()
+    model = SentenceModel(hidden_size=256)
     model.train(X_train, y_train)
 
     y_pred = [model.predict_char(s) for s in X_test]

@@ -24,7 +24,7 @@ class RecurrentNeuralNetwork(nn.Module):
 
 
 class SentenceModel:
-    def __init__(self, hidden_size: int = 128,
+    def __init__(self, hidden_size: int = 128, # remember to change this to 128 for small and large, 256 for crazy
                  lr: float = 0.005,
                  vocab: str = all_letters) -> None:
         self.hidden_size = hidden_size
