@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import random
+from time import sleep
 import matplotlib.pyplot as plt
 all_letters = "abcdefghijklmnopqrstuvwxyz,.?!' "
 end_char = ".?!"
@@ -25,13 +26,15 @@ class RecurrentNeuralNetwork(nn.Module):
 
 class SentenceModel:
     def __init__(self, hidden_size: int = 128, # remember to change this to 128 for small and large, 256 for crazy
-                 lr: float = 0.005,
+                 lr: float = 0.001,
                  vocab: str = all_letters) -> None:
         self.hidden_size = hidden_size
         self.lr = lr
         self.loss_function = nn.NLLLoss()
         self.init_hidden()
         self.model = RecurrentNeuralNetwork(num_letters, hidden_size, num_letters)
+        self.model.eval()
+        self.optimizer = torch.optim.SGD(self.model.parameters(), lr=lr, momentum=0.9)
     
       
     def char_to_tensor_out(char: str):
@@ -94,7 +97,7 @@ class SentenceModel:
                 char_idx = torch.argmax(o)
                 char = all_letters[char_idx]
                 print(char, end='', flush=True)
-                time.sleep(0.1)
+                sleep(0.05)
                 last_char = char
     
     def predict_char(self, string: str) -> str:
@@ -116,10 +119,12 @@ class SentenceModel:
         loss = self.loss_function(output, next_char_tensor)
         loss.backward()
         
-        # update rule
-        for p in self.model.parameters():
-            p.data.add_(p.grad.data, alpha=-self.lr)
+        # # update rule
+        # for p in self.model.parameters():
+        #     p.data.add_(p.grad.data, alpha=-self.lr)
         
+        self.optimizer.step()
+                
         return output, loss.item()
         
     def train(self, strings: list[str], target: list[str], shuffle: bool = False):

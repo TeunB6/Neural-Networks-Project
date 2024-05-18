@@ -5,18 +5,18 @@ from sklearn.metrics import accuracy_score
 import os
 
 def train_new(name):
-    path = os.path.join(os.curdir, "data")
-
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    data_path = os.path.join(dir_path, "data")
     raw_sentences = []
 
-    file = "crazy.txt" # fill in data file you want to train on here
+    file = "full.txt" # fill in data file you want to train on here
     
-    fp = os.path.join(path, file)
+    fp = os.path.join(data_path, file)
     with open(fp, 'r') as f:
         raw_sentences += [line.strip() for line in f.readlines()]
 
     def extract_data(sentences: list[str]) -> tuple[list[str], list[str]]:
-        size_threshold = 5 # min is 2 : large, small and crazy were all trained with size_threshold = 2
+        size_threshold = 10 # min is 2 : large, small and crazy were all trained with size_threshold = 2
         
         strings, chars = [], []
         for s in sentences:
@@ -33,13 +33,15 @@ def train_new(name):
 
     y_pred = [model.predict_char(s) for s in X_test]
 
-    model.save(os.path.join(os.curdir, "models/"), name)
+    model.save(os.path.join(dir_path, "models/"), name)
 
     print("Accuracy: ", accuracy_score(y_test, y_pred))
 
 def run_existing(name):
-    model = SentenceModel()
-    model.load(os.path.join(os.curdir, "models/"), name)
+    model = SentenceModel(hidden_size=256)
+    dir_path = os.path.dirname(os.path.realpath(__file__))
+    model.load(os.path.join(dir_path, "models/"), name)
+
 
     while True:
         string = input("Input next starting sentence. Input '!' to stop the program: \n")
