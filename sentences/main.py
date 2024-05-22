@@ -9,7 +9,7 @@ def train_new(name):
     data_path = os.path.join(dir_path, "data")
     raw_sentences = []
 
-    file = "full.txt" # fill in data file you want to train on here
+    file = f"{name}.txt" # fill in data file you want to train on here
     
     fp = os.path.join(data_path, file)
     with open(fp, 'r') as f:

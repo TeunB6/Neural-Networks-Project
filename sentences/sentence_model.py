@@ -142,6 +142,9 @@ class SentenceModel:
                 char_tensor = torch.tensor([char_index])             
                 o, loss = self._train_sample(string_tensor, char_tensor)
                 
+                if loss < 0.001:
+                    break
+                
                 if iter % 100 == 0:
                     print(f"{iter}/{len(data)} loss = {loss}") 
                     loss_history.append(loss)
