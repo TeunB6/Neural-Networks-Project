@@ -14,6 +14,12 @@ class RNNModel(nn.Module):
         out, _ = self.rnn(x, h0)
         out = self.h2o(out[:, -1, :])  # Take the last output
         return out
+    
+    def fit(self, X, y):
+        pass
+    
+    def score(self, X, y):
+        pass
 
     def save_model(self, path):
         torch.save(self.state_dict(), path)
