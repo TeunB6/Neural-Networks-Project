@@ -4,17 +4,17 @@ from scipy.io.wavfile import write
 import os
 
 class VoiceLoader:
-    def __init__(self, parameters: dict) -> None:
+    def __init__(self, parameters: dict = {}) -> None:
         # base parameters
-        self.base_freq = parameters["base_freq"] if parameters["base_freq"] else 440
-        self.sample_rate = parameters["sample_rate"] if parameters["sample_rate"] else 10000
-        self.duration_per_symbol = parameters["duration_per_symbol"] if parameters["duration_per_symbol"] else 1/16
-
+        self.base_freq = parameters.get("base_freq", 440)
+        self.sample_rate = parameters.get("sample_rate", 10000)
+        self.duration_per_symbol = parameters.get("duration_per_symbol", 1/16)
+        
     def _load_data(self, path: str):
         data = []
         with open(path, 'r') as f:
             for line in f.readlines():
-                data.append(line.split())
+                data.append(list(map(int, line.split())))
         return np.asarray(data)
 
     def _load_voice(self, data: np.ndarray, voice: int):
@@ -36,20 +36,35 @@ class VoiceLoader:
             t = np.arange(tone_length)
             
             tone_vector = np.sin(2*np.pi*frequency*t / self.sample_rate)
-            soundvector[start_idx*ticks_per_symbol, idx * ticks_per_symbol] = tone_vector
+            
+            fade_in_out_length = min(int(0.01 * self.sample_rate), tone_length // 2)
+            fade_in = np.linspace(0, 1, fade_in_out_length)
+            fade_out = np.linspace(1, 0, fade_in_out_length)
+            tone_vector[:fade_in_out_length] *= fade_in
+            tone_vector[-fade_in_out_length:] *= fade_out
+            
+            
+            soundvector[start_idx*ticks_per_symbol:idx * ticks_per_symbol] = tone_vector
             current_symbol = next_symbol
             start_idx = idx
         return soundvector
     
-    def __call__(self, path: str, voice: int) -> np.Any:
+    def __call__(self, path: str, voice: int): # TODO: make this work with providing the voice directly
         dir = os.path.splitdrive(path)[0]
         output_path = os.path.join(dir, f"output_voice_{voice}.wav")
         
         voice_data = self._load_data(path)
-        soundvector = self._load_voice(path, voice)
+        soundvector = self._load_voice(voice_data, voice)
         
         
-        
-        if not os.path.exists(output_path):
-            write(output_path, self.sample_rate, (soundvector * 32767).astype(np.int16))
-        
+        # if not os.path.exists(output_path):
+        write(output_path, self.sample_rate, (soundvector * 32767).astype(np.int16))
+
+if __name__ == "__main__":
+    path = '/home/teunb/Assignments/Yr2 - Assignments/Neural-Networks-Project/music/ProjectBach_materials/F.txt'
+    parameters = {"base_freq" : 440,
+                  "sample_rate" : 10000,
+                  "duration_per_symbol" : 1/16}
+
+    vl = VoiceLoader(parameters)
+    vl(path, 0)

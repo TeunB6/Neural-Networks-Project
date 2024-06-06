@@ -110,5 +110,5 @@ end
 
 % add the two soundvectors to get a 2-voice score
 soundvector = (soundvector1 + soundvector2 + soundvector3 + soundvector4)/ 4;
-sound(soundvector1(100000:200000), 10000);
+sound(soundvector4(100000:200000), 10000);
 

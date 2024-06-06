@@ -4,14 +4,15 @@ from itertools import product
 from sklearn.model_selection import KFold
 import numpy as np
 
+
 class GridSearch:
-    def __init__(self, model: Module, param_grid: dict, folds: int, verbose: int = 0) -> None:
+    def __init__(self, model, param_grid: dict, folds: int, verbose: int = 0) -> None:
         self.model_class = model
         self.param_combinations = [zip(param_grid.keys(), v) for v in product(*param_grid.values())]
         self.folds = folds
         self.verbose = verbose
     
-    def __call__(self, X: np.ndarray, y: np.ndarray) -> tuple[Module, int]:
+    def __call__(self, X: np.ndarray, y: np.ndarray) -> tuple[Module, int, dict]: # TODO: Chagne the type for Module to ABC of musicmodel
         results = []
         if self.verbose > 0:
             print(f"Running grid search on {len(self.param_combinations)} combinations of {len(self.param_combinations[0])} parameters...")
@@ -41,7 +42,7 @@ class GridSearch:
         if self.verbose > 0:
             print(f"Selected Parameters: {final_param} - score: {final_score}")
         
-        return final_model, final_model
+        return final_model, final_score, final_param
         
 
 
