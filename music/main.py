@@ -12,5 +12,9 @@ def train():
     vl = VoiceLoader(parameters)
     data = vl(path)
     
+    # Create subsequences and next note
+    X = None
+    y = None
     
+    X_train, X_test, y_train, y_test = train_test_split(data)
     
