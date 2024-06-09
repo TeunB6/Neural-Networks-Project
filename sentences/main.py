@@ -48,7 +48,7 @@ def run_existing(name):
         if string == '!':
             exit(0)
         
-        predicted = model.predict_sentence(string)
+        predicted = model.predict_continuous(string)
         print(f"Predicted sentence: {predicted}")
 
 if __name__ == "__main__":

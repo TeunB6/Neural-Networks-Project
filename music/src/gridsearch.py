@@ -8,9 +8,13 @@ import numpy as np
 class GridSearch:
     def __init__(self, model, param_grid: dict, folds: int, verbose: int = 0) -> None:
         self.model_class = model
-        self.param_combinations = [zip(param_grid.keys(), v) for v in product(*param_grid.values())]
+        self.param_combinations = [dict(zip(param_grid.keys(), v)) for v in product(*param_grid.values())]
         self.folds = folds
         self.verbose = verbose
+    
+    @staticmethod
+    def get_samples(data, idx_list):
+        return [data[i] for i in idx_list]
     
     def __call__(self, X: np.ndarray, y: np.ndarray) -> tuple[Module, int, dict]: # TODO: Chagne the type for Module to ABC of musicmodel
         results = []
@@ -22,8 +26,9 @@ class GridSearch:
             kFold=KFold(n_splits=self.folds,shuffle=True)
             trial_model = self.model_class(**param)
             scores = []
-            for fold, train_index,test_index in enumerate(kFold.split(X)):                
-                X_train, X_test, y_train, y_test = X[train_index], X[test_index], y[train_index], y[test_index]
+            for fold, (train_index, test_index) in enumerate(kFold.split(X)):                
+                X_train, X_test, y_train, y_test = (self.get_samples(X, train_index), self.get_samples(X, test_index),
+                                                    self.get_samples(y, train_index), self.get_samples(y, train_index))
                 trial_model.fit(X_train, y_train)
                 s = trial_model.score(X_test, y_test)
                 

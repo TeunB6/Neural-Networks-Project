@@ -7,5 +7,6 @@ def one_hot_encode(key: int) -> np.ndarray:
     return v
 
 def one_hot_decode(v: np.ndarray) -> int:
-    idx = np.where(v == 1)
+    idx = int(np.where(v == 1)[0])
+    print(idx)
     return NOTE_LIST[idx]
