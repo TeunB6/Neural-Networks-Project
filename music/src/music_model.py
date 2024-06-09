@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import numpy as np
 from torch.optim import Optimizer, Adam, SGD
-from src.constants import INPUT_SIZE, OUTPUT_SIZE
+from src.constants import INPUT_SIZE, OUTPUT_SIZE, WEIGHT_VECTOR
 from src.utils.device import fetch_device
 
 class RNNModel(nn.Module):
@@ -11,25 +11,31 @@ class RNNModel(nn.Module):
         self.hidden_size = hidden_size
         
         self.num_layers = num_layers
-        self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True, dropout=0.3)
-        self.h2o = nn.Linear(hidden_size, output_size)
-        self.softmax = nn.Softmax(0)
+        self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
+        self.h2prob = nn.Sequential(
+            nn.Linear(hidden_size, output_size),
+            nn.Softmax(-1)
+        )
+        self.h2num = nn.Sequential(
+            nn.Linear(hidden_size, 1),
+            nn.ReLU()
+        )
 
     def forward(self, x, h0 = None):
         h0 = torch.zeros(self.num_layers, self.hidden_size).to(fetch_device()) if not h0 else h0 
         out, ht = self.rnn(x, h0)
-        out = self.h2o(out[-1])  # Take the last output
-        prob_out = self.softmax(out)
-        # print(prob_out)
-        return prob_out, ht
+        out = out[-1]
+        prob_out = self.h2prob(out)
+        num_out = self.h2num(out)
+        return prob_out, num_out, ht
 
 class MusicModel:  
-    def __init__(self, loss_function = nn.CrossEntropyLoss(),
-                       optimizer: Optimizer = Adam,
-                       optimizer_args: dict = {"lr" : 0.0005},
+    def __init__(self, loss_function = nn.CrossEntropyLoss(weight=torch.tensor(WEIGHT_VECTOR)),
+                       optimizer: Optimizer = SGD,
+                       optimizer_args: dict = {"lr" : 0.001},
                        epochs: int = 1, 
-                       hidden_size: int = 256,
-                       num_layers: int = 2,
+                       hidden_size: int = 64,
+                       num_layers: int = 1,
                        verbose: int = 0,
                        ) -> None:
         # Set learning parameters
@@ -39,8 +45,10 @@ class MusicModel:
         self.loss = loss_function
         self.model = RNNModel(INPUT_SIZE, self.hidden_size, OUTPUT_SIZE, num_layers).to(fetch_device())
         self.optimizer : Optimizer = optimizer(self.model.parameters(), **optimizer_args)
-    
+        
     def fit(self, X, y) -> None:
+        
+        torch.autograd.set_detect_anomaly(True)
         self.model.train()
         try:
             for e in range(self.epochs):
@@ -51,18 +59,22 @@ class MusicModel:
                 data_len = len(X)
                 for i, (data, target) in enumerate(zip(X, y)):
                     data_t = torch.tensor(data, dtype=torch.float32)
-                    target_t = torch.tensor(target, dtype=torch.float32)
-                    out, _ = self.model.forward(data_t)
-                    loss = self.loss(out, target_t)
+                    target_t = torch.tensor(target[:-1], dtype=torch.float32)
+                    target_num = torch.tensor([target[-1]], dtype=torch.float32)
+                    out_prob, out_num, _ = self.model.forward(data_t)
+                    prob_loss = self.loss(out_prob, target_t)
+                    num_loss = torch.nn.functional.mse_loss(out_num, target_num)
                     
-                    loss.backward()
+                    total_loss = prob_loss # + num_loss
+                    total_loss.backward()
                     self.optimizer.step()
                     
-                    loss_history.append(loss.item())
+                    loss_history.append(total_loss.item())
                     
                     if self.verbose > 1 and (i + 1) % 100 == 0:
-                        print(out)
                         print(f"Iteration {i}/{data_len}: mean loss - {torch.mean(torch.tensor(loss_history[i + 1 - 100 : i]))}")
+                        # print(f"Latest Sample: target {torch.argmax(target_t), target_num},\n\t\t out {torch.argmax(out_prob), out_num}" + 
+                        #       f" \n {out_prob, torch.sum(out_prob)}")
                 
                 if self.verbose > 0:
                     print(f"Epoch {e+1}/{self.epochs}: mean loss - {torch.mean(torch.tensor(loss_history))}")
@@ -72,7 +84,10 @@ class MusicModel:
             raise e
                     
     
-    def score(self, X, y) -> None:
+    def score(self, X, y) -> torch.Tensor:
+        
+        X = torch.tensor(X)
+        y = torch.tensor(y)
         loss_history = []
         self.model.eval()
         
@@ -85,6 +100,7 @@ class MusicModel:
             mean_loss = torch.mean(loss_history)
             if self.verbose > 0: 
                 print(f"Scored {len(X)} data points: mean loss of {mean_loss}")
+        return mean_loss
     
     @staticmethod
     def select_note(p:torch.Tensor):
