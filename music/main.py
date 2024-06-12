@@ -77,12 +77,22 @@ def train(X, y):
     # model, score, parameters = gr(X_train, y_train)
     # print(score, parameters)
     
-    model = MusicModel(verbose=2)
+    model = MusicModel(verbose=3, epochs=1000, batch_size=100)
     model.fit(X_train, y_train)
     model.score(X_test, y_test)
     
     model.save("./models", "test")
+
+def complex_training():
+    # Load data from Sequence.txt
+     
+    # Create list of datasets based on different parts of the series
     
+    # Train model on every part of the sequence
+    
+    # Profit
+    return
+
 if __name__ == "__main__":
     try:
         X, y = load_data()
