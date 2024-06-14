@@ -20,7 +20,7 @@ class GridSearch:
         results = []
         if self.verbose > 0:
             print(f"Running grid search on {len(self.param_combinations)} combinations of {len(self.param_combinations[0])} parameters...")
-        for param in self.param_combinations:
+        for i, param in enumerate(self.param_combinations):
             
             
             kFold=KFold(n_splits=self.folds,shuffle=True)
@@ -38,11 +38,11 @@ class GridSearch:
                 scores.append(s)
             
             mean_score = np.mean(scores)
-            results.append(trial_model, mean_score, param)
+            results.append((trial_model, mean_score, param))
             if self.verbose > 1:
-                print(f"parameters: {param}  - score: {mean_score}")
+                print(f"{i+1}/{len(self.param_combinations)}- \t parameters: {param}  - score: {mean_score}")
         
-        final_model, final_score, final_param = max(results, key=lambda x: x[1])
+        final_model, final_score, final_param = min(results, key=lambda x: x[1])
         
         if self.verbose > 0:
             print(f"Selected Parameters: {final_param} - score: {final_score}")

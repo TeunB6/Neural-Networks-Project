@@ -6,6 +6,7 @@ from torch.optim import Optimizer, Adam, SGD
 from torch.utils.data import DataLoader
 from src.constants import INPUT_SIZE, OUTPUT_SIZE, WEIGHT_VECTOR
 from src.utils.device import fetch_device
+from src.utils.preprocess import one_hot_decode
 from src.utils.dataset import CustomDataset
 class RNNModel(nn.Module):
     def __init__(self, input_size, hidden_size,
@@ -28,29 +29,28 @@ class RNNModel(nn.Module):
 
     def forward(self, x, h0 = None):
         num_batches = x.shape[0]
-        h0 = torch.zeros(self.num_layers, num_batches, self.hidden_size, device=self.device) if not h0 else h0
+        h0 = torch.zeros(self.num_layers, num_batches, self.hidden_size, device=self.device) if h0 is None else h0
         out, ht = self.rnn(x, h0)
         out = out[:, -1, :]
         prob_out = self.h2prob(out)
         num_out = self.h2num(out)
-        return prob_out.to(self.device), num_out.to(self.device), ht.to(self.device)
+        return prob_out, num_out, ht
 
 class MusicModel:  
     def __init__(self, loss_function = nn.CrossEntropyLoss(weight=torch.tensor(WEIGHT_VECTOR)),
                        optimizer: Optimizer = Adam,
-                       optimizer_args: dict = {"lr" : 0.01},
+                       optimizer_args: dict = {"lr" : 0.05},
                        epochs: int = 1, 
-                       hidden_size: int = 128,
-                       num_layers: int = 10,
+                       hidden_size: int = 256,
+                       num_layers: int = 2,
                        batch_size: int = 100,
-                       verbose: int = 1,
+                       verbose: int = 0,
                        ) -> None:
         # Set up 
         self.device = fetch_device()
         self.model = RNNModel(INPUT_SIZE, hidden_size, OUTPUT_SIZE, num_layers, batch_size).to(self.device)
         self.optimizer : Optimizer = optimizer(self.model.parameters(), **optimizer_args)
         # self.optimizer : Optimizer = optimizer(self.model.h2prob.parameters(), **optimizer_args)
-        
         
         # Set learning parameters
         self.epochs = epochs
@@ -83,6 +83,8 @@ class MusicModel:
                     # num_loss = torch.nn.functional.mse_loss(out_num, target_num)
                     
                     total_loss = prob_loss
+                    
+                    self.optimizer.zero_grad()
                     total_loss.backward()
                     self.optimizer.step()
                     
@@ -138,8 +140,8 @@ class MusicModel:
     
     @staticmethod
     def select_note(p:torch.Tensor):
-        
-        selected_note = np.random.choice(range(INPUT_SIZE), p=p.detach().numpy())
+        probabilities = p.cpu().detach().numpy()[0]
+        selected_note = np.random.choice(range(INPUT_SIZE - 1), p=probabilities)
         one_hot = np.zeros((INPUT_SIZE))
         one_hot[selected_note] = 1
         return one_hot
@@ -148,16 +150,17 @@ class MusicModel:
     
     def predict(self, X, num_notes) -> list:
         note_vector = []    
+        X = torch.tensor([[X]], dtype=torch.float32, device=self.device)
         with torch.no_grad():
-            out, ht = self.model.forward(X)
-            data = self.select_note(out)
-            note_vector.append(data)
+            out_prob, out_num, ht = self.model.forward(X)
+            data = self.select_note(out_prob)
+            note_vector.append(one_hot_decode(data))
             
             for _ in range(num_notes):
-                out, ht = self.model.forward(data, ht)
-                data = self.select_note(out)
-                note_vector.append(data)
-                
+                out_prob, out_num, ht = self.model.forward(torch.tensor([[data]], dtype=torch.float32, device=self.device), ht)
+                data = self.select_note(out_prob)
+                note_vector.append(one_hot_decode(data))
+                print(out_prob)
         return note_vector
 
     def save(self, file_path='./', name: str = "") -> None:
@@ -180,6 +183,6 @@ class MusicModel:
     def lr(self):
         return self.optimizer.param_groups[0]['lr']
     
-    @property.setter
+    @lr.setter
     def lr(self, new_lr):
         self.optimizer.param_groups[0]['lr'] = new_lr
