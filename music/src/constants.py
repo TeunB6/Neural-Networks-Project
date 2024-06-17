@@ -1,7 +1,7 @@
 INPUT_SIZE = 23
 OUTPUT_SIZE = 22
-SEQ_LEN_MIN = 5
-SEQ_LEN_MAX = 5
+SEQ_LEN_MIN = 10
+SEQ_LEN_MAX = 100
 
 # List of all notes,: below corresponding weight
 NOTE_LIST = [0, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 73, 74, 76]

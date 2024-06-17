@@ -8,6 +8,8 @@ from src.constants import INPUT_SIZE, OUTPUT_SIZE, WEIGHT_VECTOR
 from src.utils.device import fetch_device
 from src.utils.preprocess import one_hot_decode
 from src.utils.dataset import CustomDataset
+
+
 class RNNModel(nn.Module):
     def __init__(self, input_size, hidden_size,
                  output_size, num_layers, batch_size):
@@ -38,12 +40,12 @@ class RNNModel(nn.Module):
 
 class MusicModel:  
     def __init__(self, loss_function = nn.CrossEntropyLoss(weight=torch.tensor(WEIGHT_VECTOR)),
-                       optimizer: Optimizer = Adam,
-                       optimizer_args: dict = {"lr" : 0.05},
-                       epochs: int = 1, 
-                       hidden_size: int = 256,
+                       optimizer: Optimizer = SGD,
+                       optimizer_args: dict = {"lr" : 0.1, "momentum" : 0.9},
+                       epochs: int = 10, 
+                       hidden_size: int = 64,
                        num_layers: int = 2,
-                       batch_size: int = 100,
+                       batch_size: int = 300,
                        verbose: int = 0,
                        ) -> None:
         # Set up 
@@ -61,16 +63,19 @@ class MusicModel:
     def fit(self, X, y) -> None:
         
         self.model.train()
+        
+        X = torch.tensor(np.array(X), dtype=torch.float32, device=self.device)
+        y = torch.tensor(np.array(y), dtype=torch.float32, device=self.device)
+        dataset = CustomDataset(X, y)
+
+        
         try:
             for e in range(self.epochs):
                 if self.verbose > 0:
                     print(f"Starting Epoch {e+1}/{self.epochs}")
                 
                 loss_history = []
-                X = torch.tensor(X, dtype=torch.float32, device=self.device)
-                y = torch.tensor(y, dtype=torch.float32, device=self.device)
                 
-                dataset = CustomDataset(X, y)
                 
                 train_loader = DataLoader(dataset, self.batch_size, shuffle=True)
                 data_len = len(train_loader)
@@ -109,14 +114,14 @@ class MusicModel:
             plt.show()
 
     
-    def score(self, X, y) -> torch.Tensor:
+    def score(self, X, y) -> tuple[float, float]:
         
         loss_history = []
+        acc_history = []
         self.model.eval()
         
-        X = torch.tensor(X, dtype=torch.float32, device=self.device)
-        y = torch.tensor(y, dtype=torch.float32, device=self.device)
-        
+        X = torch.tensor(np.array(X), dtype=torch.float32, device=self.device)
+        y = torch.tensor(np.array(y), dtype=torch.float32, device=self.device)
         dataset = CustomDataset(X, y)
         
         test_loader = DataLoader(dataset, self.batch_size, shuffle=True)
@@ -126,17 +131,25 @@ class MusicModel:
                 target_note = target[:, :-1] 
                 target_num = target[:, -1]
                 out_prob, out_num, _ = self.model.forward(data)
+                
+                # Calculate loss
                 prob_loss = self.loss(out_prob, target_note)
                 # num_loss = torch.nn.functional.mse_loss(out_num, target_num)
                 
                 total_loss = prob_loss                
                 loss_history.append(total_loss.item())
-                    
-            
+                
+                # Calculate Accuracy
+                out_note = np.round(out_prob.cpu())
+                total = out_prob.size(0)
+                correct = total - (out_note != target_note.cpu()).sum().item() / 2                
+                acc_history.append((correct / total))
+                            
+            mean_acc = np.mean(acc_history)
             mean_loss = np.mean(loss_history)
             if self.verbose > 0: 
-                print(f"Scored {len(X)} data points: mean loss of {mean_loss}")
-        return mean_loss
+                print(f"Scored {len(X)} data points: mean loss of {mean_loss}, mean accuracy of {mean_acc}")
+        return mean_loss, mean_acc
     
     @staticmethod
     def select_note(p:torch.Tensor):

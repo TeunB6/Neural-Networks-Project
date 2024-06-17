@@ -26,23 +26,23 @@ class GridSearch:
             kFold=KFold(n_splits=self.folds,shuffle=True)
             trial_model = self.model_class(**param)
             scores = []
-            for fold, (train_index, test_index) in enumerate(kFold.split(X)):                
-                X_train, X_test, y_train, y_test = (self.get_samples(X, train_index), self.get_samples(X, test_index),
-                                                    self.get_samples(y, train_index), self.get_samples(y, train_index))
+            for fold, (train_index, val_index) in enumerate(kFold.split(X, y)):                
+                X_train, X_val, y_train, y_val = (self.get_samples(X, train_index), self.get_samples(X, val_index),
+                                                    self.get_samples(y, train_index), self.get_samples(y, val_index))
                 trial_model.fit(X_train, y_train)
-                s = trial_model.score(X_test, y_test)
+                s = trial_model.score(X_val, y_val)
                 
                 if self.verbose > 2:
-                    print(f"Fold {fold}/{self.folds} - score: {s}")
+                    print(f"Fold {fold + 1}/{self.folds} - score: {s}")
                 
-                scores.append(s)
+                scores.append(list(s))
             
-            mean_score = np.mean(scores)
+            mean_score = np.mean(scores, axis=0)
             results.append((trial_model, mean_score, param))
             if self.verbose > 1:
-                print(f"{i+1}/{len(self.param_combinations)}- \t parameters: {param}  - score: {mean_score}")
+                print(f"{i+1}/{len(self.param_combinations)}\t-\tparameters: {param} - score: {mean_score}")
         
-        final_model, final_score, final_param = min(results, key=lambda x: x[1])
+        final_model, final_score, final_param = min(results, key=lambda x: x[1][0])
         
         if self.verbose > 0:
             print(f"Selected Parameters: {final_param} - score: {final_score}")
