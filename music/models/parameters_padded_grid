@@ -1,0 +1,1 @@
+{'optimizer': <class 'torch.optim.adam.Adam'>, 'optimizer_args': {'lr': 0.01}, 'hidden_size': 64, 'num_layers': 1, 'batch_size': 300}

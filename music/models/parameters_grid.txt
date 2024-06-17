@@ -1,0 +1,1 @@
+{'optimizer': torch.optim.Adam, 'optimizer_args': {'lr': 0.01}, 'hidden_size': 64, 'num_layers': 4, 'batch_size': 50, 'epochs': 5}
