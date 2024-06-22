@@ -36,7 +36,7 @@ class RNNModel(nn.Module):
         out = out[:, -1, :]
         prob_out = self.h2prob(out)
         num_out = self.h2num(out)
-        return prob_out, num_out, ht
+        return ht
 
 class MusicModel:  
     def __init__(self, loss_function = nn.CrossEntropyLoss(weight=torch.tensor(WEIGHT_VECTOR)),
@@ -58,8 +58,20 @@ class MusicModel:
         self.epochs = epochs
         self.verbose = verbose
         self.loss = loss_function.to(self.device)
-        self.batch_size = batch_size 
-        
+        self.batch_size = batch_size
+    def sample(self, sequence):
+        h0 = None
+        data = []
+        paired_sequence = [(sequence[i], sequence[i+1]) for i in range(len(sequence) - 1)]
+        for note, next_note in paired_sequence:
+            hidden = self.model.forward(note, h0)
+            data.append((hidden, next_note))
+
+        return data
+
+
+
+
     def fit(self, X, y) -> None:
         
         self.model.train()
@@ -152,7 +164,7 @@ class MusicModel:
         return mean_loss, mean_acc
     
     @staticmethod
-    def select_note(p:torch.Tensor):
+    def select_note(p: torch.Tensor):
         probabilities = p.cpu().detach().numpy()[0]
         selected_note = np.random.choice(range(INPUT_SIZE - 1), p=probabilities)
         one_hot = np.zeros((INPUT_SIZE))
