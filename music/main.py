@@ -40,7 +40,7 @@ def save_data(X, y):
 
 def train_new(name):
     
-    model = MusicModel(verbose = 3)
+    model = MusicModel(verbose = 1)
     
     if os.path.exists(os.path.join(data_path, "X.data")):
         X, y = load_data()
@@ -63,7 +63,12 @@ def run_existing(name):
     model.load(os.path.join(dir_path, "models/"), name)
 
     X = np.concatenate((one_hot_encode(0), [5]))
+    X = np.expand_dims(X, 0)
     pred = model.predict(X, 100)
+    
+    sequence = load_sequence()
+    pred = model.predict(sequence, 100)
+    
     print(pred)
 
 

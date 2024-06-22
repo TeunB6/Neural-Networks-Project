@@ -28,9 +28,8 @@ class RNNModel(nn.Module):
 
     
     def forward(self, x, h0 = None):
-        num_batches = x.shape[0]
         if h0 is None:
-            h0 = (torch.zeros(self.num_layers, num_batches, self.hidden_size, device=self.device) if num_batches != 1
+            h0 = (torch.zeros(self.num_layers, x.shape[0], self.hidden_size, device=self.device) if x.dim() > 2
                   else torch.zeros(self.num_layers, self.hidden_size, device=self.device))
         _, ht = self.rnn(x, h0)
         return ht[-1], ht
@@ -38,11 +37,11 @@ class RNNModel(nn.Module):
 class MusicModel:  
     def __init__(self, loss_function = nn.CrossEntropyLoss(weight=torch.tensor(WEIGHT_VECTOR)),
                        optimizer: Optimizer = Adam,
-                       optimizer_args: dict = {"lr" : 0.0001},
+                       optimizer_args: dict = {"lr" : 0.001},
                        epochs: int = 100, 
-                       hidden_size: int = 1024,
+                       hidden_size: int = 2048,
                        num_layers: int = 1,
-                       batch_size: int = 30,
+                       batch_size: int = 1,
                        verbose: int = 0,
                        ) -> None:
         # Set up 
@@ -52,7 +51,7 @@ class MusicModel:
         self.model = nn.Sequential(nn.Linear(hidden_size, hidden_size //2),
                                    nn.ReLU(),
                                    nn.Linear(hidden_size // 2, OUTPUT_SIZE),
-                                   nn.Softmax(dim=1)).to(self.device) #TODO Extend this to work with the number of notes as well
+                                   nn.Softmax(dim=-1)).to(self.device) #TODO Extend this to work with the number of notes as well
         
         self.optimizer : Optimizer = optimizer(self.model.parameters(), **optimizer_args)
         
@@ -85,14 +84,15 @@ class MusicModel:
         X = torch.tensor(np.array(X), dtype=torch.float32, device=self.device)
         y = torch.tensor(np.array(y), dtype=torch.float32, device=self.device)
         dataset = CustomDataset(X, y)
-
+        loss_history = []
         
         try:
+            
             for e in range(self.epochs):
                 if self.verbose > 0:
                     print(f"Starting Epoch {e+1}/{self.epochs}")
                 
-                loss_history = []
+                epoch_loss = []
                 
                 
                 train_loader = DataLoader(dataset, self.batch_size, shuffle=True)
@@ -111,22 +111,25 @@ class MusicModel:
                     total_loss.backward()
                     self.optimizer.step()
                     
-                    loss_history.append(total_loss.item())
+                    epoch_loss.append(total_loss.item())
                     
                     if self.verbose > 1:
                         print(f"Iteration {i + 1}/{data_len}: mean loss - {total_loss.item()}")
                         # print(f"Latest Sample: target {torch.argmax(target_note), target_num},\n\t\t out {torch.argmax(out_prob), out_num}" + 
                         #       f" \n {out_prob, torch.sum(out_prob)}")
                 
+                mean_loss = np.mean(epoch_loss)
+                loss_history.append(mean_loss)
+                
                 if self.verbose > 0:
-                    print(f"Epoch {e+1}/{self.epochs}: mean loss - {np.mean(loss_history)}")
+                    print(f"Epoch {e+1}/{self.epochs}: mean loss - {mean_loss}")
         except Exception as e:
             print(f"Error occured: Saving Model...")
             self.save(name="error")
             raise e
         
         # Plot loss curve
-        if self.verbose > 2:
+        if self.verbose > 0:
             plt.figure()
             plt.plot(loss_history)
             plt.show()
@@ -158,10 +161,11 @@ class MusicModel:
                 loss_history.append(total_loss.item())
                 
                 # Calculate Accuracy
-                out_note = np.round(out_prob.cpu())
-                total = out_prob.size(0)
-                correct = total - (out_note != target_note.cpu()).sum().item() / 2                
-                acc_history.append((correct / total))
+                out_note = [np.where(arr == np.max(arr), 1, 0) for arr in out_prob.cpu().numpy()]
+                correct = sum(one_hot_decode(pred) == one_hot_decode(true) for pred, true in zip(out_note, target_note.cpu()) if sum(true) != 0)
+                total = len(target)
+                acc_history.append(correct / total)
+
                             
             mean_acc = np.mean(acc_history)
             mean_loss = np.mean(loss_history)
@@ -171,28 +175,33 @@ class MusicModel:
     
     @staticmethod
     def select_note(p: torch.Tensor):
-        probabilities = p.cpu().detach().numpy()[0]
+        probabilities = p.cpu().detach().numpy()
         selected_note = np.random.choice(range(INPUT_SIZE - 1), p=probabilities)
-        one_hot = np.zeros((INPUT_SIZE))
+        one_hot = torch.zeros((INPUT_SIZE))
         one_hot[selected_note] = 1
         return one_hot
         
         
     
     def predict(self, X, num_notes) -> list:
-        note_vector = []    
-        X = torch.tensor([[X]], dtype=torch.float32, device=self.device)
+        output_list = []    
+        X = torch.tensor(np.array(X), dtype=torch.float32, device=self.device)
+        print(X)
         with torch.no_grad():
-            out_prob, out_num, ht = self.model.forward(X)
-            data = self.select_note(out_prob)
-            note_vector.append(one_hot_decode(data))
+            sample, ht = self.reservoir.forward(X)
+            out_prob = self.model.forward(sample)
+            selected_note = self.select_note(out_prob)
+            output_list.append(one_hot_decode(selected_note))
             
             for _ in range(num_notes):
-                out_prob, out_num, ht = self.model.forward(torch.tensor([[data]], dtype=torch.float32, device=self.device), ht)
-                data = self.select_note(out_prob)
-                note_vector.append(one_hot_decode(data))
-                print(out_prob)
-        return note_vector
+                selected_note.unsqueeze_(0)
+                selected_note = selected_note.to(self.device)
+                sample, ht = self.reservoir.forward(selected_note, ht)
+                
+                out_prob = self.model.forward(sample)
+                selected_note = self.select_note(out_prob)
+                output_list.append(one_hot_decode(selected_note))
+        return output_list
 
     def save(self, file_path='./', name: str = "") -> None:
         """
