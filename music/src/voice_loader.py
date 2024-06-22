@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.io.wavfile import write
+from typing import Optional
 import os
 
 class VoiceLoader:
@@ -18,7 +19,7 @@ class VoiceLoader:
         return np.asarray(data)
 
     def _load_voice(self, data: np.ndarray, voice: int):
-        voice_data = data[:, voice]
+        voice_data = data[:, voice] if data.ndim == 2 else data
         symbolic_length = len(voice_data)
         ticks_per_symbol = int(self.sample_rate * self.duration_per_symbol)
         
@@ -49,15 +50,17 @@ class VoiceLoader:
             start_idx = idx
         return soundvector
     
-    def __call__(self, path: str, voice: int): # TODO: make this work with providing the voice directly
-        dir = os.path.splitdrive(path)[0]
-        output_path = os.path.join(dir, f"output_voice_{voice}.wav")
+    def __call__(self, save_path: str, data_path: Optional[str] = None, voice: Optional[int] = None, data: Optional[np.ndarray] = None, name: str = ""): # TODO: make this work with providing the voice directly
+        if data is None:
+            voice_data = self._load_data(data_path)
+        else:
+            voice_data = data
         
-        voice_data = self._load_data(path)
         soundvector = self._load_voice(voice_data, voice)
         
         
         # if not os.path.exists(output_path):
+        output_path = os.path.join(save_path, f"output_{name}.wav")
         write(output_path, self.sample_rate, (soundvector * 32767).astype(np.int16))
 
 if __name__ == "__main__":

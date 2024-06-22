@@ -14,6 +14,7 @@ from src.constants import SEQ_LEN_MIN, SEQ_LEN_MAX, INPUT_SIZE
 data_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'data')
 dir_path = os.path.dirname(os.path.realpath(__file__))
 save_path = os.path.join(dir_path, "models/")
+music_path = os.path.join(dir_path, "wav output/")
 
 
 def load_sequence():
@@ -50,25 +51,31 @@ def train_new(name):
         save_data(X, y)
     
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
-    model.fit_ffn(X_train, y_train)
+    model.fit_ffn(X, y) # NOTE: SWAP THIS BACK
     
     model.score_ffn(X_test, y_test)
     
     model.save(save_path, name)
 
 def run_existing(name):
-    model = MusicModel(loss_function=torch.nn.CrossEntropyLoss(), verbose=3,
-                       epochs=1, batch_size=100)
+    model = MusicModel()
     dir_path = os.path.dirname(os.path.realpath(__file__))
     model.load(os.path.join(dir_path, "models/"), name)
 
-    X = np.concatenate((one_hot_encode(0), [5]))
-    X = np.expand_dims(X, 0)
-    pred = model.predict(X, 100)
+    # X = np.concatenate((one_hot_encode(0), [5]))
+    # X = np.expand_dims(X, 0)
+    # pred = model.predict(X, 100)
     
     sequence = load_sequence()
     pred = model.predict(sequence, 100)
-    
+    if not os.path.exists(os.path.join(music_path, name)):
+        vl = VoiceLoader()
+        start = model.predict(sequence[:10], 300)
+        middle = model.predict(sequence[:300], 300)
+        end = model.predict(sequence[:600], 300)
+        vl(music_path, data=np.array(start), name=f"{name}-start")
+        vl(music_path, data=np.array(middle), name=f"{name}-middle")
+        vl(music_path, data=np.array(end), name=f"{name}-end")
     print(pred)
 
 

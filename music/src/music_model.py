@@ -6,7 +6,7 @@ from torch.optim import Optimizer, Adam, SGD
 from torch.utils.data import DataLoader
 from src.constants import INPUT_SIZE, OUTPUT_SIZE, WEIGHT_VECTOR
 from src.utils.device import fetch_device
-from src.utils.preprocess import one_hot_decode
+from src.utils.preprocess import one_hot_decode, one_hot_max
 from src.utils.dataset import CustomDataset
 
 
@@ -28,17 +28,19 @@ class RNNModel(nn.Module):
 
     
     def forward(self, x, h0 = None):
-        if h0 is None:
-            h0 = (torch.zeros(self.num_layers, x.shape[0], self.hidden_size, device=self.device) if x.dim() > 2
-                  else torch.zeros(self.num_layers, self.hidden_size, device=self.device))
-        _, ht = self.rnn(x, h0)
+        with torch.no_grad():
+            if h0 is None:
+                h0 = (torch.zeros(self.num_layers, x.shape[0], self.hidden_size, device=self.device) if x.dim() > 2
+                    else torch.zeros(self.num_layers, self.hidden_size, device=self.device))
+            _, ht = self.rnn(x, h0)
         return ht[-1], ht
 
 class MusicModel:  
-    def __init__(self, loss_function = nn.CrossEntropyLoss(weight=torch.tensor(WEIGHT_VECTOR)),
-                       optimizer: Optimizer = Adam,
-                       optimizer_args: dict = {"lr" : 0.001},
-                       epochs: int = 100, 
+    def __init__(self, prob_optimizer: Optimizer = SGD,
+                       prob_optimizer_args: dict = {"lr" : 0.005, "momentum" : 0.9},
+                       durr_optimizer: Optimizer = Adam,
+                       durr_optimizer_args: dict = {"lr" : 0.001},
+                       epochs: int = 30, 
                        hidden_size: int = 2048,
                        num_layers: int = 1,
                        batch_size: int = 1,
@@ -48,17 +50,26 @@ class MusicModel:
         
         self.device = fetch_device()
         self.reservoir = RNNModel(INPUT_SIZE, hidden_size, num_layers, batch_size).to(self.device)
-        self.model = nn.Sequential(nn.Linear(hidden_size, hidden_size //2),
+        self.prob_model = nn.Sequential(nn.Linear(hidden_size, hidden_size //2),
                                    nn.ReLU(),
                                    nn.Linear(hidden_size // 2, OUTPUT_SIZE),
-                                   nn.Softmax(dim=-1)).to(self.device) #TODO Extend this to work with the number of notes as well
+                                   nn.Sigmoid()).to(self.device)
+                                   #nn.Softmax(dim=-1)).to(self.device)
+        self.durr_model = nn.Sequential(nn.Linear(hidden_size, 1),
+                                #    nn.ReLU(),
+                                #    nn.Linear(hidden_size // 2, 1),
+                                   nn.ReLU()).to(self.device)
         
-        self.optimizer : Optimizer = optimizer(self.model.parameters(), **optimizer_args)
+        
+        self.prob_optimizer : Optimizer = prob_optimizer(self.prob_model.parameters(), **prob_optimizer_args)
+        self.durr_optimizer : Optimizer = durr_optimizer(self.durr_model.parameters(), **durr_optimizer_args)
         
         # Set learning parameters
         self.epochs = epochs
         self.verbose = verbose
-        self.loss = loss_function.to(self.device)
+        self.prob_loss_function =  nn.CrossEntropyLoss(weight=torch.tensor(WEIGHT_VECTOR)).to(self.device)
+        self.durr_loss_function = nn.MSELoss().to(self.device)
+        
         self.batch_size = batch_size
     
     
@@ -68,18 +79,18 @@ class MusicModel:
         labels = []
         sequence = torch.tensor(np.array(sequence), dtype=torch.float32, device=self.device)
         paired_sequence = [(sequence[i], sequence[i+1]) for i in range(len(sequence) - 1)]
-        with torch.no_grad():
-            for note, next_note in paired_sequence:
-                reservoir_state, hidden = self.reservoir.forward(note.unsqueeze(0), hidden)
-                data.append(reservoir_state.cpu())
-                labels.append(next_note.cpu())
+        for note, next_note in paired_sequence:
+            reservoir_state, hidden = self.reservoir.forward(note.unsqueeze(0), hidden)
+            data.append(reservoir_state.cpu())
+            labels.append(next_note.cpu())
 
-            return np.array(data), np.array(labels)
+        return np.array(data), np.array(labels)
 
 
     def fit_ffn(self, X, y) -> None:
-        
-        self.model.train()
+        # Put models in training mode
+        self.prob_model.train()
+        self.durr_model.train()
         
         X = torch.tensor(np.array(X), dtype=torch.float32, device=self.device)
         y = torch.tensor(np.array(y), dtype=torch.float32, device=self.device)
@@ -99,30 +110,36 @@ class MusicModel:
                 data_len = len(train_loader)
                 
                 for i, (data, target) in enumerate(train_loader):
-                    target_note = target[:, :-1] 
-                    target_num = target[:, -1]
-                    out_prob = self.model.forward(data)
-                    prob_loss = self.loss(out_prob, target_note)
-                    # num_loss = torch.nn.functional.mse_loss(out_num, target_num)
+                    # Get probability and duration target
+                    target_prob = target[:, :-1] 
+                    target_durr = target[:, -1].unsqueeze(-1)
                     
-                    total_loss = prob_loss
+                    # Compute probability and duration predictions
+                    out_prob = self.prob_model.forward(data)
+                    out_durr = self.durr_model.forward(data)
                     
-                    self.optimizer.zero_grad()
-                    total_loss.backward()
-                    self.optimizer.step()
+                    # Compute losses
+                    prob_loss = self.prob_loss_function(out_prob, target_prob)
+                    durr_loss = self.durr_loss_function(out_durr, target_durr)
                     
-                    epoch_loss.append(total_loss.item())
+                    # Backwards passes
+                    self.prob_optimizer.zero_grad()
+                    self.durr_optimizer.zero_grad()
+                    prob_loss.backward()
+                    durr_loss.backward()
+                    self.prob_optimizer.step()
+                    self.durr_optimizer.step()
+                    
+                    epoch_loss.append((prob_loss.item(), durr_loss.item()))
                     
                     if self.verbose > 1:
-                        print(f"Iteration {i + 1}/{data_len}: mean loss - {total_loss.item()}")
-                        # print(f"Latest Sample: target {torch.argmax(target_note), target_num},\n\t\t out {torch.argmax(out_prob), out_num}" + 
-                        #       f" \n {out_prob, torch.sum(out_prob)}")
+                        print(f"Iteration {i + 1}/{data_len}:  loss prob - {prob_loss.item()}, loss durr - {durr_loss.item()}")
                 
-                mean_loss = np.mean(epoch_loss)
+                mean_loss = np.mean(epoch_loss, axis=0)
                 loss_history.append(mean_loss)
                 
                 if self.verbose > 0:
-                    print(f"Epoch {e+1}/{self.epochs}: mean loss - {mean_loss}")
+                    print(f"Epoch {e+1}/{self.epochs}: mean loss prob - {mean_loss[0]}, mean loss durr - {mean_loss[1]}")
         except Exception as e:
             print(f"Error occured: Saving Model...")
             self.save(name="error")
@@ -131,7 +148,11 @@ class MusicModel:
         # Plot loss curve
         if self.verbose > 0:
             plt.figure()
-            plt.plot(loss_history)
+            plot_data = np.array(loss_history)
+            plt.subplot(121)
+            plt.plot(plot_data[:, 0])
+            plt.subplot(122)
+            plt.plot(plot_data[:, 1])
             plt.show()
 
     
@@ -139,7 +160,12 @@ class MusicModel:
         
         loss_history = []
         acc_history = []
-        self.model.eval()
+        
+        # Put models in evaluation mode
+        self.prob_model.eval()
+        self.durr_model.eval()
+        
+
         
         X = torch.tensor(np.array(X), dtype=torch.float32, device=self.device)
         y = torch.tensor(np.array(y), dtype=torch.float32, device=self.device)
@@ -149,20 +175,23 @@ class MusicModel:
         
         with torch.no_grad():
             for data, target in test_loader:
-                target_note = target[:, :-1] 
-                target_num = target[:, -1]
-                out_prob = self.model.forward(data)
+                # Get probability and duration target
+                target_prob = target[:, :-1] 
+                target_durr = target[:, -1].unsqueeze(-1)
+                
+                # Compute probability and duration predictions
+                out_prob = self.prob_model.forward(data)
+                out_durr = self.durr_model.forward(data)
                 
                 # Calculate loss
-                prob_loss = self.loss(out_prob, target_note)
-                # num_loss = torch.nn.functional.mse_loss(out_num, target_num)
-                
-                total_loss = prob_loss                
+                prob_loss = self.prob_loss_function(out_prob, target_prob)
+                durr_loss = self.durr_loss_function(out_durr, target_durr)
+                total_loss = prob_loss + durr_loss            
                 loss_history.append(total_loss.item())
                 
                 # Calculate Accuracy
-                out_note = [np.where(arr == np.max(arr), 1, 0) for arr in out_prob.cpu().numpy()]
-                correct = sum(one_hot_decode(pred) == one_hot_decode(true) for pred, true in zip(out_note, target_note.cpu()) if sum(true) != 0)
+                out_note = [one_hot_max(arr) for arr in out_prob.cpu().numpy()]
+                correct = sum(one_hot_decode(pred) == one_hot_decode(true) for pred, true in zip(out_note, target_prob.cpu()) if sum(true) != 0)
                 total = len(target)
                 acc_history.append(correct / total)
 
@@ -176,7 +205,10 @@ class MusicModel:
     @staticmethod
     def select_note(p: torch.Tensor):
         probabilities = p.cpu().detach().numpy()
-        selected_note = np.random.choice(range(INPUT_SIZE - 1), p=probabilities)
+        if sum(probabilities) == 1:
+            selected_note = np.random.choice(range(INPUT_SIZE - 1), p=probabilities)
+        else:
+            selected_note = np.argmax(probabilities)
         one_hot = torch.zeros((INPUT_SIZE))
         one_hot[selected_note] = 1
         return one_hot
@@ -189,18 +221,24 @@ class MusicModel:
         print(X)
         with torch.no_grad():
             sample, ht = self.reservoir.forward(X)
-            out_prob = self.model.forward(sample)
+            out_prob = self.prob_model.forward(sample)
+            out_durr = self.durr_model.forward(sample)
             selected_note = self.select_note(out_prob)
-            output_list.append(one_hot_decode(selected_note))
+            output_list += [one_hot_decode(selected_note)] * int(out_durr + 1)
+            # output_list.append((one_hot_decode(selected_note), float(out_durr)))
             
             for _ in range(num_notes):
                 selected_note.unsqueeze_(0)
                 selected_note = selected_note.to(self.device)
                 sample, ht = self.reservoir.forward(selected_note, ht)
                 
-                out_prob = self.model.forward(sample)
+                out_prob = self.prob_model.forward(sample)
+                out_durr = self.durr_model.forward(sample)
+                
                 selected_note = self.select_note(out_prob)
-                output_list.append(one_hot_decode(selected_note))
+                output_list += [one_hot_decode(selected_note)] * int(out_durr + 1)
+                # output_list.append((one_hot_decode(selected_note), float(out_durr)))
+
         return output_list
 
     def save(self, file_path='./', name: str = "") -> None:
@@ -209,7 +247,8 @@ class MusicModel:
 
         :param file_path: The directory path to save the models.
         """
-        torch.save(self.model.state_dict(), file_path + f"{name}_FFN.pth")
+        torch.save(self.prob_model.state_dict(), file_path + f"{name}_FFN_prob.pth")
+        torch.save(self.durr_model.state_dict(), file_path + f"{name}_FFN_durr.pth")
         torch.save(self.reservoir.state_dict(), file_path + f"{name}_reservoir.pth")
 
     def load(self, file_path='./', name: str = "") -> None:
@@ -218,7 +257,8 @@ class MusicModel:
 
         :param file_path: The directory path to load the models from.
         """
-        self.model.load_state_dict(torch.load(file_path + f"{name}_FFN.pth"))
+        self.prob_model.load_state_dict(torch.load(file_path + f"{name}_FFN_prob.pth"))
+        self.durr_model.load_state_dict(torch.load(file_path + f"{name}_FFN_durr.pth"))
         self.reservoir.load_state_dict(torch.load(file_path + f"{name}_reservoir.pth"))
         
     @property
