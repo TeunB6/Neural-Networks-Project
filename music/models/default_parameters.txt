@@ -1,0 +1,10 @@
+prob_optimizer: Optimizer = Adam,
+prob_optimizer_args: dict = {"lr" : 0.001},
+durr_optimizer: Optimizer = Adam,
+durr_optimizer_args: dict = {"lr" : 0.001},
+epochs: int = 10, 
+hidden_size: int = 2048,
+num_layers: int = 1,
+batch_size: int = 1,
+verbose: int = 0,
+activation: sigmoid
