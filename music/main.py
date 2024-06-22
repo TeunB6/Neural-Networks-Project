@@ -74,7 +74,7 @@ def train_default():
         X, y = extract_data()
     X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=0.7, shuffle=True)
     
-    model = MusicModel(loss_function=torch.nn.CrossEntropyLoss(), verbose=3)
+    model = MusicModel(verbose=3)
     model.fit(X_train, y_train)
     model.score(X_test, y_test)
 
@@ -113,10 +113,10 @@ def train_grid():
                                     {"lr" : 0.005, "momentum" : 0.09},
                                     {"lr" : 0.0005, "momentum" : 0.09}
                                     ],
-                'hidden_size' : [64],
-                'num_layers' : [2],
-                'batch_size' : [300]}
-    gr = GridSearch(MusicModel, param_grid, 4, verbose=3)
+                'hidden_size' : [1024, 2048, 4096],
+                'num_layers' : [1, 2, 3],
+                'batch_size' : [100]}
+    gr = GridSearch(MusicModel, param_grid, 4, verbose=2)
     model, score, parameters = gr(X_train, y_train)
     model.score(X_test, y_test)
     return model
@@ -136,7 +136,7 @@ def train_split() -> MusicModel:
     data_sets = [create_dataset(sequence[start:end]) for start, end in zip(range(0, seq_len, split_size),
                                                            range(split_size, seq_len, split_size))]
     
-    model = MusicModel(verbose=1, optimizer=torch.optim.SGD, optimizer_args={'lr' : 0.05, "momentum" : 0.9}, epochs=30, hidden_size=256, num_layers=1, batch_size=1)
+    model = MusicModel(verbose=3)
     
     h = []
     # Train model on every part of the sequence

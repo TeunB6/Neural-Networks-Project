@@ -8,6 +8,8 @@ from src.constants import INPUT_SIZE, OUTPUT_SIZE, WEIGHT_VECTOR
 from src.utils.device import fetch_device
 from src.utils.preprocess import one_hot_decode
 from src.utils.dataset import CustomDataset
+from sklearn.metrics import accuracy_score
+from torch.nn.utils import clip_grad_norm_
 
 
 class RNNModel(nn.Module):
@@ -20,6 +22,7 @@ class RNNModel(nn.Module):
         self.device = fetch_device()
         self.num_layers = num_layers
         self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
+        self.init_weights(self.rnn)
         self.h2prob = nn.Sequential(
             nn.Linear(hidden_size, output_size),
             nn.Softmax(dim=1)
@@ -28,7 +31,12 @@ class RNNModel(nn.Module):
             nn.Linear(hidden_size, 1),
             nn.ReLU()
         )
-
+    
+    def init_weights(self, module: nn.Module):
+        for param in module.parameters():
+            if param.requires_grad:
+                nn.init.uniform_(param, a=-0.5, b=0.5)
+                
     def forward(self, x, h0 = None):
         num_batches = x.shape[0]
         h0 = torch.zeros(self.num_layers, num_batches, self.hidden_size, device=self.device) if h0 is None else h0
@@ -40,12 +48,12 @@ class RNNModel(nn.Module):
 
 class MusicModel:  
     def __init__(self, loss_function = nn.CrossEntropyLoss(weight=torch.tensor(WEIGHT_VECTOR)),
-                       optimizer: Optimizer = SGD,
-                       optimizer_args: dict = {"lr" : 0.1, "momentum" : 0.9},
+                       optimizer: Optimizer = Adam,
+                       optimizer_args: dict = {"lr" : 0.01},
                        epochs: int = 10, 
-                       hidden_size: int = 64,
-                       num_layers: int = 2,
-                       batch_size: int = 300,
+                       hidden_size: int = 1028,
+                       num_layers: int = 1,
+                       batch_size: int = 100,
                        verbose: int = 0,
                        ) -> None:
         # Set up 
@@ -88,9 +96,15 @@ class MusicModel:
                     # num_loss = torch.nn.functional.mse_loss(out_num, target_num)
                     
                     total_loss = prob_loss
-                    
+                                        
                     self.optimizer.zero_grad()
                     total_loss.backward()
+                    clip_grad_norm_(self.model.parameters(), max_norm=1)
+                    
+                    for name, param in self.model.named_parameters():
+                        if param.grad is not None:
+                            print(f"Layer: {name} | Gradients: {param.grad}, Value: {param}")
+                        
                     self.optimizer.step()
                     
                     loss_history.append(total_loss.item())
@@ -140,10 +154,10 @@ class MusicModel:
                 loss_history.append(total_loss.item())
                 
                 # Calculate Accuracy
-                out_note = np.round(out_prob.cpu())
-                total = out_prob.size(0)
-                correct = total - (out_note != target_note.cpu()).sum().item() / 2                
-                acc_history.append((correct / total))
+                out_note = [np.where(arr == np.max(arr), 1, 0) for arr in out_prob.cpu().numpy()]
+                correct = sum(one_hot_decode(pred) == one_hot_decode(true) for pred, true in zip(out_note, target_note) if sum(true) != 0)
+                total = len(target)
+                acc_history.append(correct / total)
                             
             mean_acc = np.mean(acc_history)
             mean_loss = np.mean(loss_history)
