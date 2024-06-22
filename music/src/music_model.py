@@ -11,8 +11,7 @@ from src.utils.dataset import CustomDataset
 
 
 class RNNModel(nn.Module):
-    def __init__(self, input_size, hidden_size,
-                 output_size, num_layers, batch_size):
+    def __init__(self, input_size, hidden_size, num_layers, batch_size):
         super(RNNModel, self).__init__()
         self.hidden_size = hidden_size
         self.batch_size = batch_size
@@ -20,59 +19,61 @@ class RNNModel(nn.Module):
         self.device = fetch_device()
         self.num_layers = num_layers
         self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
-        self.h2prob = nn.Sequential(
-            nn.Linear(hidden_size, output_size),
-            nn.Softmax(dim=1)
-        )
-        self.h2num = nn.Sequential(
-            nn.Linear(hidden_size, 1),
-            nn.ReLU()
-        )
 
+
+    
     def forward(self, x, h0 = None):
         num_batches = x.shape[0]
-        h0 = torch.zeros(self.num_layers, num_batches, self.hidden_size, device=self.device) if h0 is None else h0
-        out, ht = self.rnn(x, h0)
-        out = out[:, -1, :]
-        prob_out = self.h2prob(out)
-        num_out = self.h2num(out)
-        return ht
+        if h0 is None:
+            h0 = (torch.zeros(self.num_layers, num_batches, self.hidden_size, device=self.device) if num_batches != 1
+                  else torch.zeros(self.num_layers, self.hidden_size, device=self.device))
+        _, ht = self.rnn(x, h0)
+        return ht[-1], ht
 
 class MusicModel:  
     def __init__(self, loss_function = nn.CrossEntropyLoss(weight=torch.tensor(WEIGHT_VECTOR)),
-                       optimizer: Optimizer = SGD,
-                       optimizer_args: dict = {"lr" : 0.1, "momentum" : 0.9},
-                       epochs: int = 10, 
-                       hidden_size: int = 64,
-                       num_layers: int = 2,
-                       batch_size: int = 300,
+                       optimizer: Optimizer = Adam,
+                       optimizer_args: dict = {"lr" : 0.0001},
+                       epochs: int = 100, 
+                       hidden_size: int = 1024,
+                       num_layers: int = 1,
+                       batch_size: int = 30,
                        verbose: int = 0,
                        ) -> None:
         # Set up 
+        
         self.device = fetch_device()
-        self.model = RNNModel(INPUT_SIZE, hidden_size, OUTPUT_SIZE, num_layers, batch_size).to(self.device)
+        self.reservoir = RNNModel(INPUT_SIZE, hidden_size, num_layers, batch_size).to(self.device)
+        self.model = nn.Sequential(nn.Linear(hidden_size, hidden_size //2),
+                                   nn.ReLU(),
+                                   nn.Linear(hidden_size // 2, OUTPUT_SIZE),
+                                   nn.Softmax(dim=1)).to(self.device) #TODO Extend this to work with the number of notes as well
+        
         self.optimizer : Optimizer = optimizer(self.model.parameters(), **optimizer_args)
-        # self.optimizer : Optimizer = optimizer(self.model.h2prob.parameters(), **optimizer_args)
         
         # Set learning parameters
         self.epochs = epochs
         self.verbose = verbose
         self.loss = loss_function.to(self.device)
         self.batch_size = batch_size
-    def sample(self, sequence):
-        h0 = None
+    
+    
+    def sample_reservoir(self, sequence):
+        hidden = None
         data = []
+        labels = []
+        sequence = torch.tensor(np.array(sequence), dtype=torch.float32, device=self.device)
         paired_sequence = [(sequence[i], sequence[i+1]) for i in range(len(sequence) - 1)]
-        for note, next_note in paired_sequence:
-            hidden = self.model.forward(note, h0)
-            data.append((hidden, next_note))
+        with torch.no_grad():
+            for note, next_note in paired_sequence:
+                reservoir_state, hidden = self.reservoir.forward(note.unsqueeze(0), hidden)
+                data.append(reservoir_state.cpu())
+                labels.append(next_note.cpu())
 
-        return data
+            return np.array(data), np.array(labels)
 
 
-
-
-    def fit(self, X, y) -> None:
+    def fit_ffn(self, X, y) -> None:
         
         self.model.train()
         
@@ -95,7 +96,7 @@ class MusicModel:
                 for i, (data, target) in enumerate(train_loader):
                     target_note = target[:, :-1] 
                     target_num = target[:, -1]
-                    out_prob, out_num, _ = self.model.forward(data)
+                    out_prob = self.model.forward(data)
                     prob_loss = self.loss(out_prob, target_note)
                     # num_loss = torch.nn.functional.mse_loss(out_num, target_num)
                     
@@ -126,7 +127,7 @@ class MusicModel:
             plt.show()
 
     
-    def score(self, X, y) -> tuple[float, float]:
+    def score_ffn(self, X, y) -> tuple[float, float]:
         
         loss_history = []
         acc_history = []
@@ -139,10 +140,10 @@ class MusicModel:
         test_loader = DataLoader(dataset, self.batch_size, shuffle=True)
         
         with torch.no_grad():
-            for i, (data, target) in enumerate(test_loader):
+            for data, target in test_loader:
                 target_note = target[:, :-1] 
                 target_num = target[:, -1]
-                out_prob, out_num, _ = self.model.forward(data)
+                out_prob = self.model.forward(data)
                 
                 # Calculate loss
                 prob_loss = self.loss(out_prob, target_note)
@@ -194,7 +195,8 @@ class MusicModel:
 
         :param file_path: The directory path to save the models.
         """
-        torch.save(self.model.state_dict(), file_path + f"music_model_{name}.pth")
+        torch.save(self.model.state_dict(), file_path + f"{name}_FFN.pth")
+        torch.save(self.reservoir.state_dict(), file_path + f"{name}_reservoir.pth")
 
     def load(self, file_path='./', name: str = "") -> None:
         """
@@ -202,8 +204,9 @@ class MusicModel:
 
         :param file_path: The directory path to load the models from.
         """
-        self.model.load_state_dict(torch.load(file_path + f"music_model_{name}.pth"))
-
+        self.model.load_state_dict(torch.load(file_path + f"{name}_FFN.pth"))
+        self.reservoir.load_state_dict(torch.load(file_path + f"{name}_reservoir.pth"))
+        
     @property
     def lr(self):
         return self.optimizer.param_groups[0]['lr']

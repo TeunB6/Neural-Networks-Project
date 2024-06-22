@@ -11,134 +11,49 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder
 from src.constants import SEQ_LEN_MIN, SEQ_LEN_MAX, INPUT_SIZE
 
-path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'data')
+data_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'data')
+dir_path = os.path.dirname(os.path.realpath(__file__))
+save_path = os.path.join(dir_path, "models/")
 
 
-def extract_data():
-    data = []
-    with open(os.path.join(path, 'F.txt'), 'r') as f:
-        for line in f.readlines():
-            data.append(list(map(int, line.split())))
-    
-    data = np.asarray(data)[:, 0]
-        
-    start_idx = 0
-    curr_key = data[0]
-    
-    sequence = []
-    
-    for idx, key in enumerate(data):
-        if key == curr_key and idx < len(data) - 1:
-            continue
-        sequence.append((curr_key, idx - start_idx))
-        start_idx = idx
-        curr_key = key
-    
-    print("loading data")
-    with open(os.path.join(path, 'sequence.txt')) as file:
+def load_sequence():
+    with open(os.path.join(data_path, 'sequence.txt')) as file:
         sequence = [tuple(map(int, line.split())) for line in file.readlines()]
 
-    sequence = [(one_hot_encode(s[0]), s[1]) for s in sequence]
-
+    sequence = [np.concatenate((one_hot_encode(s[0]), [s[1]])) for s in sequence]
+    
     return sequence
 
 def load_data():
-    with open(os.path.join(path, 'X.data'), 'rb') as f: 
+    with open(os.path.join(data_path, 'X.data'), 'rb') as f: 
         X = pkl.load(f)
-    with open(os.path.join(path, 'y.data'), 'rb') as f:
+    with open(os.path.join(data_path, 'y.data'), 'rb') as f:
         y = pkl.load(f)
     return X, y
-    
-def train_default():
-    try:
-        X, y = load_data()
-    except FileNotFoundError:
-        sequence = extract_data()
-        print(sequence[0])
 
-    model = MusicModel(loss_function=torch.nn.CrossEntropyLoss(), verbose=3)
-    model.fit(X_train, y_train)
-    model.score(X_test, y_test)
-
-    return model
-
-
-
-
-def train_grid():  
-    try:
-        X, y = load_data()
-    except FileNotFoundError:
-        X, y = extract_data() 
-    X_train, X_test, y_train, y_test = train_test_split(X, y, train_size=0.7, shuffle=True)
- 
-    param_grid = {'optimizer' : [torch.optim.SGD],
-                'optimizer_args' : [{"lr" : 0.1, "momentum" : 0.9},
-                                    {"lr" : 0.01, "momentum" : 0.9},
-                                    {"lr" : 0.001, "momentum" : 0.9},
-                                    {"lr" : 0.0001, "momentum" : 0.9},
-                                    {"lr" : 0.1, "momentum" : 0.5},
-                                    {"lr" : 0.01, "momentum" : 0.5},
-                                    {"lr" : 0.001, "momentum" : 0.5},
-                                    {"lr" : 0.0001, "momentum" : 0.5},
-                                    {"lr" : 0.1, "momentum" : 0.09},
-                                    {"lr" : 0.01, "momentum" : 0.09},
-                                    {"lr" : 0.001, "momentum" : 0.09},
-                                    {"lr" : 0.0001, "momentum" : 0.09},
-                                    {"lr" : 0.5, "momentum" : 0.9},
-                                    {"lr" : 0.05, "momentum" : 0.9},
-                                    {"lr" : 0.005, "momentum" : 0.9},
-                                    {"lr" : 0.0005, "momentum" : 0.9},
-                                    {"lr" : 0.5, "momentum" : 0.5},
-                                    {"lr" : 0.05, "momentum" : 0.5},
-                                    {"lr" : 0.005, "momentum" : 0.5},
-                                    {"lr" : 0.0005, "momentum" : 0.5},
-                                    {"lr" : 0.5, "momentum" : 0.09},
-                                    {"lr" : 0.05, "momentum" : 0.09},
-                                    {"lr" : 0.005, "momentum" : 0.09},
-                                    {"lr" : 0.0005, "momentum" : 0.09}
-                                    ],
-                'hidden_size' : [64],
-                'num_layers' : [2],
-                'batch_size' : [300]}
-    gr = GridSearch(MusicModel, param_grid, 4, verbose=3)
-    model, score, parameters = gr(X_train, y_train)
-    model.score(X_test, y_test)
-    return model
-
-
-def train_split() -> MusicModel:
-    num_splits = 20
-    
-    # Load data from Sequence.txt
-    with open(os.path.join(path, 'sequence.txt')) as file:
-        sequence = [tuple(map(int, line.split())) for line in file.readlines()]
-    
-    seq_len = len(sequence)
-    split_size = seq_len // num_splits
-    print(f"Split length of {split_size}")
-    
-    # Create list of datasets based on different parts of the series
-    data_sets = [create_dataset(sequence[start:end]) for start, end in zip(range(0, seq_len, split_size),
-                                                           range(split_size, seq_len, split_size))]
-
-    model = MusicModel(verbose=1, optimizer=torch.optim.SGD, optimizer_args={'lr' : 0.05, "momentum" : 0.9}, epochs=30, hidden_size=256, num_layers=1, batch_size=1)
-    
-    h = []
-    # Train model on every part of the sequence
-    for X, y in data_sets[:1]:
-        # X_train, X_val, y_train, y_val = train_test_split(X, y, train_size=0.7, shuffle=True)
-        model.fit(X, y)
-        h.append(model.score(X, y))
-        model.lr = model.lr * 0.9
-    print(h)
-    return model
+def save_data(X, y):
+    with open(os.path.join(data_path, 'X.data'), 'wb') as f:
+        pkl.dump(X, f)
+    with open(os.path.join(data_path, 'y.data'), 'wb') as f:
+        pkl.dump(y, f)
+        
 
 def train_new(name):
     
-    model = train_default()
-    dir_path = os.path.dirname(os.path.realpath(__file__))
-    save_path = os.path.join(dir_path, "models/")
+    model = MusicModel(verbose = 3)
+    
+    if os.path.exists(os.path.join(data_path, "X.data")):
+        X, y = load_data()
+    else:
+        sequence = load_sequence()
+        X, y = model.sample_reservoir(sequence)
+        save_data(X, y)
+    
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
+    model.fit_ffn(X_train, y_train)
+    
+    model.score_ffn(X_test, y_test)
+    
     model.save(save_path, name)
 
 def run_existing(name):
@@ -155,7 +70,6 @@ def run_existing(name):
 if __name__ == "__main__":
     import sys
     args = sys.argv
-    print(args)
     if len(args) < 2 or len(args) > 3:
         raise ValueError("Invalid command line, run: python main.py train | run name")
     if args[1] == 'train':
