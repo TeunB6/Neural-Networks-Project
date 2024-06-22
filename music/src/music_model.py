@@ -19,7 +19,12 @@ class RNNModel(nn.Module):
         self.device = fetch_device()
         self.num_layers = num_layers
         self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
-
+        self.init_weights(self.rnn)
+        
+    def init_weights(self, module: nn.Module):
+        for param in module.parameters():
+            if param.requires_grad:
+                nn.init.uniform_(param, a=-0.5, b=0.5)
 
     
     def forward(self, x, h0 = None):
