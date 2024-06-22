@@ -1,3 +1,4 @@
+import sys
 import os
 import torch
 import pickle as pkl
@@ -17,7 +18,12 @@ save_path = os.path.join(dir_path, "models/")
 music_path = os.path.join(dir_path, "wav output/")
 
 
-def load_sequence():
+def load_sequence() -> list[np.ndarray]:
+    """Loads the preprocessed sequence from the disk
+
+    Returns:
+       list[np.ndarray] : the timeseries saved on the disk as a list of np.ndarrays
+    """    
     with open(os.path.join(data_path, 'sequence.txt')) as file:
         sequence = [tuple(map(int, line.split())) for line in file.readlines()]
 
@@ -25,22 +31,38 @@ def load_sequence():
     
     return sequence
 
-def load_data():
+def load_data() -> tuple[np.ndarray, np.ndarray]:
+    """Load sampled reservoir data from the disk using pickle
+
+    Returns:
+        tuple[np.ndarray, np.ndarray] : A tuple of the data and labels as saved on the disk utilised in the last run of the model
+    """    
     with open(os.path.join(data_path, 'X.data'), 'rb') as f: 
         X = pkl.load(f)
     with open(os.path.join(data_path, 'y.data'), 'rb') as f:
         y = pkl.load(f)
     return X, y
 
-def save_data(X, y):
+def save_data(X: np.ndarray, y: np.ndarray) -> None:
+    """Saves the data and labels (from the reservoir) provided on the disk using pickle
+
+    Args:
+        X (np.ndarray): data    
+        y (np.ndarray): labels
+    """    
     with open(os.path.join(data_path, 'X.data'), 'wb') as f:
         pkl.dump(X, f)
     with open(os.path.join(data_path, 'y.data'), 'wb') as f:
         pkl.dump(y, f)
         
 
-def train_new(name):
-    
+def train_new(name: str) -> None:
+    """
+    Train a new model saved under the provided name
+
+    Args:
+        name (str): name of the model
+    """    
     model = MusicModel(verbose = 1)
     
     if os.path.exists(os.path.join(data_path, "X.data")):
@@ -57,7 +79,13 @@ def train_new(name):
     
     model.save(save_path, name)
 
-def run_existing(name):
+def run_existing(name) -> None:
+    """
+    Runs a model saved on the disk, it will complete a prediction and show this. If sound files of this model do not exist they are created.
+
+    Args:
+        name (str): The name of the model to be run
+    """    
     model = MusicModel()
     dir_path = os.path.dirname(os.path.realpath(__file__))
     model.load(os.path.join(dir_path, "models/"), name)
@@ -80,16 +108,16 @@ def run_existing(name):
 
 
 if __name__ == "__main__":
-    import sys
+    # Start program: Either using argument train to train a new model with the provided name or run a saved model with the provided name
     args = sys.argv
     if len(args) < 2 or len(args) > 3:
-        raise ValueError("Invalid command line, run: python main.py train | run name")
+        raise ValueError("Invalid command line, run: python main.py train|run name")
     if args[1] == 'train':
         train_new(args[2])
     elif args[1] == 'run':
         run_existing(args[2])
     else:
-        raise ValueError("Invalid command line, run: python main.py train | run name")
+        raise ValueError("Invalid command line, run: python main.py train|run name")
     
     
     

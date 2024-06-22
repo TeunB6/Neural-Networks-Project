@@ -6,6 +6,9 @@ import numpy as np
 
 
 class GridSearch:
+    """
+    Class implementing a gridsearch
+    """    
     def __init__(self, model, param_grid: dict, folds: int, verbose: int = 0) -> None:
         self.model_class = model
         self.param_combinations = [dict(zip(param_grid.keys(), v)) for v in product(*param_grid.values())]

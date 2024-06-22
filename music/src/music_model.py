@@ -8,7 +8,7 @@ from src.constants import INPUT_SIZE, OUTPUT_SIZE, WEIGHT_VECTOR
 from src.utils.device import fetch_device
 from src.utils.preprocess import one_hot_decode, one_hot_max
 from src.utils.dataset import CustomDataset
-
+from typing import Optional
 
 class RNNModel(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, batch_size):
@@ -22,12 +22,26 @@ class RNNModel(nn.Module):
         self.init_weights(self.rnn)
         
     def init_weights(self, module: nn.Module):
+        """Initializes the weights of the provided module in [-0.5,0.5], resulting in the network likely possesing the echo state property.
+
+        Args:
+            module (nn.Module): the module whose parameters should be initialized.
+        """        
         for param in module.parameters():
             if param.requires_grad:
                 nn.init.uniform_(param, a=-0.5, b=0.5)
 
     
-    def forward(self, x, h0 = None):
+    def forward(self, x: torch.Tensor, h0: Optional[torch.Tensor] = None) -> tuple[torch.Tensor, torch.Tensor]:
+        """One forward pass of the network
+
+        Args:
+            x (torch.Tensor): the (batched) time series to generate the hiddenstates from
+            h0 (torch.Tensor, optional): The current hidden state of the network, when None the hidden state is initialized . Defaults to None.
+
+        Returns:
+           tuple[torch.Tensor, torch.Tensor] : A tuple of the final hidden vector relevant for the output and the full hidden state needed to continue the process for the next timestep
+        """        
         with torch.no_grad():
             if h0 is None:
                 h0 = (torch.zeros(self.num_layers, x.shape[0], self.hidden_size, device=self.device) if x.dim() > 2
@@ -73,7 +87,16 @@ class MusicModel:
         self.batch_size = batch_size
     
     
-    def sample_reservoir(self, sequence):
+    def sample_reservoir(self, sequence: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Method for sampling the reservoir, this create a supervised learning dataset which can be used to train the FFN based on the hidden states of the recurrent reservoir.
+
+        Args:
+            sequence (np.ndarray): The time series to create the samples from
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: Tuple containing the data and corresponding labels sampled from the reservoir
+        """        
         hidden = None
         data = []
         labels = []
@@ -87,7 +110,17 @@ class MusicModel:
         return np.array(data), np.array(labels)
 
 
-    def fit_ffn(self, X, y) -> None:
+    def fit_ffn(self, X: np.ndarray, y: np.ndarray) -> None:
+        """
+        Method for training the feedforward network, utilises the two different loss functions to train the note and duration predictor networks. Based on the data sampled from the reservoir.
+
+        Args:
+            X (np.ndarray): Data from reservoir
+            y (np.ndarray): Labels
+
+        Raises:
+            e: Any errors faced while running the model will be reraised after saving the current model
+        """        
         # Put models in training mode
         self.prob_model.train()
         self.durr_model.train()
@@ -156,8 +189,17 @@ class MusicModel:
             plt.show()
 
     
-    def score_ffn(self, X, y) -> tuple[float, float]:
-        
+    def score_ffn(self, X:np.ndarray, y:np.ndarray) -> tuple[float, float]:
+        """
+        Evaluates the FFN based on the testing datasets provided.
+
+        Args:
+            X (np.ndarray): Data
+            y (np.ndarray): Labels
+
+        Returns:
+            tuple[float, float]: Tuple of mean loss and accuracy across the testing set.
+        """        
         loss_history = []
         acc_history = []
         
@@ -203,7 +245,16 @@ class MusicModel:
         return mean_loss, mean_acc
     
     @staticmethod
-    def select_note(p: torch.Tensor):
+    def select_note(p: torch.Tensor) -> torch.Tensor:
+        """
+        Staticemthod for selecting the note based on the model output, if the FFN output is a probability distribution then these are used to randomize the note, otherwise the maximum value is chosen.
+
+        Args:
+            p (torch.Tensor): tensor of either probabilities or values taken from the network
+
+        Returns:
+            torch.Tensor: The one hot encoding from the selected note
+        """        
         probabilities = p.cpu().detach().numpy()
         if sum(probabilities) == 1:
             selected_note = np.random.choice(range(INPUT_SIZE - 1), p=probabilities)
@@ -215,17 +266,24 @@ class MusicModel:
         
         
     
-    def predict(self, X, num_notes) -> list:
+    def predict(self, X: np.ndarray | list[np.ndarray], num_notes: int) -> list:
+        """Generates a prediction of the continuation of sequence X, the output is the raw time series as can be interpreted by the voice loader class
+
+        Args:
+            X (np.ndarray | list[np.ndarray]): The starting sequence, either a np.ndarray or a list of np.ndarrays
+            num_notes (int): the amount of different notes to predict into the future (model time steps)
+
+        Returns:
+            list: the resulting time series
+        """        
         output_list = []    
         X = torch.tensor(np.array(X), dtype=torch.float32, device=self.device)
-        print(X)
         with torch.no_grad():
             sample, ht = self.reservoir.forward(X)
             out_prob = self.prob_model.forward(sample)
             out_durr = self.durr_model.forward(sample)
             selected_note = self.select_note(out_prob)
             output_list += [one_hot_decode(selected_note)] * int(out_durr + 1)
-            # output_list.append((one_hot_decode(selected_note), float(out_durr)))
             
             for _ in range(num_notes):
                 selected_note.unsqueeze_(0)
@@ -237,7 +295,6 @@ class MusicModel:
                 
                 selected_note = self.select_note(out_prob)
                 output_list += [one_hot_decode(selected_note)] * int(out_durr + 1)
-                # output_list.append((one_hot_decode(selected_note), float(out_durr)))
 
         return output_list
 
@@ -261,10 +318,3 @@ class MusicModel:
         self.durr_model.load_state_dict(torch.load(file_path + f"{name}_FFN_durr.pth"))
         self.reservoir.load_state_dict(torch.load(file_path + f"{name}_reservoir.pth"))
         
-    @property
-    def lr(self):
-        return self.optimizer.param_groups[0]['lr']
-    
-    @lr.setter
-    def lr(self, new_lr):
-        self.optimizer.param_groups[0]['lr'] = new_lr
