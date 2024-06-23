@@ -1,4 +1,5 @@
 import torch
+import re
 import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
@@ -11,69 +12,93 @@ from src.utils.dataset import CustomDataset
 from typing import Optional
 
 class RNNModel(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, batch_size, init_range):
+    def __init__(self, input_size: int, hidden_size: int, num_layers: int,
+                 batch_size: int, init_range: tuple[float, float],
+                 spectral_radius: float, leakage_rate: float,
+                 density: float):
         super(RNNModel, self).__init__()
         self.hidden_size = hidden_size
         self.batch_size = batch_size
+        self.leakage_rate = leakage_rate
         
         self.device = fetch_device()
         self.num_layers = num_layers
         self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
-        self.init_weights(self.rnn, *init_range)
+        self.init_weights(self.rnn, *init_range, spectral_radius, density)
         
-    def init_weights(self, module: nn.Module, min, max):
+    def init_weights(self, module: nn.Module, min, max, spectral_radius, density):
         """Initializes the weights of the provided module in [min,max], resulting in the network likely possesing the echo state property.
 
         Args:
             module (nn.Module): the module whose parameters should be initialized.
-        """        
+        """
+        # Initialize uniform distr   
         for param in module.parameters():
             if param.requires_grad:
                 nn.init.uniform_(param, min, max)
+        # Rescale hh weight matrices occording to the spectral radius
+        for key, param in module.state_dict().items():
+            if re.fullmatch(r"weight_hh_l[0-9]*", key):
+                # Compute the max of the absolute eigen values: current spectral radius
+                # abs_ev = torch.abs(torch.linalg.eigvals(param))
+                # param.data *= (spectral_radius / torch.max(abs_ev))
+                
+                if density < 1:
+                    # get random indices to set to 0
+                    zero_weights = torch.randperm(int(self.hidden_size*self.hidden_size))
+                    zero_weights = zero_weights[:int(self.hidden_size * self.hidden_size * (1 - density))]
+                    param_flat = param.view(-1)
+                    param_flat[zero_weights] = 0
+                    param = param_flat.view(param.shape)
+                
 
     
     def forward(self, x: torch.Tensor, h0: Optional[torch.Tensor] = None) -> tuple[torch.Tensor, torch.Tensor]:
         """One forward pass of the network
 
         Args:
-            x (torch.Tensor): the (batched) time series to generate the hiddenstates from
+            x (torch.Tensor): the (batched) input time series to generate the hiddenstates from
             h0 (torch.Tensor, optional): The current hidden state of the network, when None the hidden state is initialized . Defaults to None.
 
         Returns:
            tuple[torch.Tensor, torch.Tensor] : A tuple of the final hidden vector relevant for the output and the full hidden state needed to continue the process for the next timestep
-        """        
+        """  
         with torch.no_grad():
             if h0 is None:
                 h0 = (torch.zeros(self.num_layers, x.shape[0], self.hidden_size, device=self.device) if x.dim() > 2
                     else torch.zeros(self.num_layers, self.hidden_size, device=self.device))
             _, ht = self.rnn(x, h0)
-        return ht[-1], ht
+            ht = (1-self.leakage_rate)*h0 + self.leakage_rate*ht
+        return ht[-1], ht        
 
 class MusicModel:  
-    def __init__(self, prob_optimizer: Optimizer = SGD,
-                       prob_optimizer_args: dict = {"lr" : 0.005, "momentum" : 0.9},
+    def __init__(self, prob_optimizer: Optimizer = Adam,
+                       prob_optimizer_args: dict = {"lr" : 0.001},
                        durr_optimizer: Optimizer = Adam,
-                       durr_optimizer_args: dict = {"lr" : 0.01},
+                       durr_optimizer_args: dict = {"lr" : 0.001},
                        epochs: int = 20, 
-                       hidden_size: int = 2048,
+                       hidden_size: int = 256,
                        num_layers: int = 1,
-                       batch_size: int = 1,
+                       batch_size: int = 10,
                        init_range: tuple[int, int] = (-0.5, 0.5),
+                       spectral_radius: float = 1,
+                       leakage_rate: float = 1,
+                       density: float = 1,
                        verbose: int = 0,
                        ) -> None:
         # Set up 
         
         self.device = fetch_device()
-        self.reservoir = RNNModel(INPUT_SIZE, hidden_size, num_layers, batch_size, init_range).to(self.device)
-        self.prob_model = nn.Sequential(nn.Linear(hidden_size, hidden_size //2),
-                                   nn.ReLU(),
-                                   nn.Linear(hidden_size // 2, OUTPUT_SIZE),
-                                   nn.Sigmoid()).to(self.device)
-                                   #nn.Softmax(dim=-1)).to(self.device)
-        self.durr_model = nn.Sequential(nn.Linear(hidden_size, 1),
-                                #    nn.ReLU(),
-                                #    nn.Linear(hidden_size // 2, 1),
-                                   nn.ReLU()).to(self.device)
+        self.reservoir = RNNModel(INPUT_SIZE, hidden_size, num_layers, batch_size, init_range, spectral_radius, leakage_rate, density).to(self.device)
+        #NOTE: Reminder that I added Batchnorm 1d here so now probably non of the old gridsearch models work, just comment it out ig
+        self.prob_model = nn.Sequential(#nn.BatchNorm1d(hidden_size),
+                                        nn.Linear(hidden_size, hidden_size //2),
+                                        nn.ReLU(),
+                                        nn.Linear(hidden_size // 2, OUTPUT_SIZE),
+                                        nn.Sigmoid()).to(self.device)
+        self.durr_model = nn.Sequential(#nn.BatchNorm1d(hidden_size),
+                                        nn.Linear(hidden_size, 1),
+                                        nn.ReLU()).to(self.device)
         
         
         self.prob_optimizer : Optimizer = prob_optimizer(self.prob_model.parameters(), **prob_optimizer_args)

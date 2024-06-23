@@ -5,12 +5,9 @@ import pickle as pkl
 import numpy as np
 from itertools import product
 from src.utils.preprocess import one_hot_encode
-from src.gridsearch import GridSearch
 from src.voice_loader import VoiceLoader
 from src.music_model import MusicModel
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import OneHotEncoder
-from src.constants import SEQ_LEN_MIN, SEQ_LEN_MAX, INPUT_SIZE
 
 data_path = os.path.join(os.path.dirname(os.path.realpath(__file__)), 'data')
 dir_path = os.path.dirname(os.path.realpath(__file__))
@@ -65,19 +62,27 @@ def train_new(name: str) -> None:
     """    
     model = MusicModel(verbose = 1)
     
-    if os.path.exists(os.path.join(data_path, "X.data")):
-        X, y = load_data()
-    else:
-        sequence = load_sequence()
-        X, y = model.sample_reservoir(sequence)
-        save_data(X, y)
-    
+    # if os.path.exists(os.path.join(data_path, "X.data")):
+    #     X, y = load_data()
+    # else:
+    #     sequence = load_sequence()
+    #     X, y = model.sample_reservoir(sequence)
+    #     save_data(X, y)
+    sequence = load_sequence()
+    X, y = model.sample_reservoir(sequence)
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
     model.fit_ffn(X, y) # NOTE: SWAP THIS BACK
     
     model.score_ffn(X_test, y_test)
     
     model.save(save_path, name)
+    
+    # from sklearn.linear_model import LogisticRegression
+    # from sklearn.metrics import accuracy_score
+    # lr = LogisticRegression()
+    # lr.fit(X, y[:, :-1])
+    # y_pred = lr.predict(X_test)
+    # accuracy_score(y_test[:, :-1], y_pred)
 
 def grid_search(name: str) -> None:
     """
@@ -94,20 +99,21 @@ def grid_search(name: str) -> None:
     def get_combinations(param_grid: dict) -> list:
         return [dict(zip(param_grid.keys(), v)) for v in product(*param_grid.values())]
         
-    
-    optimizer_args_grid = {"lr" : [0.5,0.1,0.05,0.01,0.005,0.001,0.0005,0.0001,0.00005,0.00001], "weight_decay" : [0,0.1,1,10]}
+    # Generate list of all combinations to try  
+    optimizer_args_grid = {"lr" : [0.1,0.01,0.001,0.0001,0.00001], "weight_decay" : [0]}
     optimizer_combinations = get_combinations(optimizer_args_grid)
     param_grid = {"num_layers" : [1],
                   "hidden_size" : [128, 256, 512, 1024, 2048, 4096],
                   "batch_size" : [1],
-                  "prob_optimizer" : [torch.optim.SGD, torch.optim.Adam],
-                  "prob_optimizer_args" : optimizer_combinations,
-                  "init_range" : [(-0.5,0.5),(-1,1),(0,1)]
+                  "durr_optimizer" : [torch.optim.SGD, torch.optim.Adam],
+                  "durr_optimizer_args" : optimizer_combinations,
+                  "init_range" : [(-0.5,0.5),(-1,1)]
                   }
     
     voice_loader = VoiceLoader()
     param_combinations = get_combinations(param_grid)
     num_combinations = len(param_combinations)
+        
     print(f"Running grid search on {num_combinations} combinations of {len(param_combinations[0])} parameters...")
     for i, param in enumerate(param_combinations):
         # Initialize path and model
@@ -131,7 +137,9 @@ def grid_search(name: str) -> None:
         # Save results
         with open(os.path.join(current_path, "summary.txt"), 'w') as f:
             f.write(f"Parameters used:\n{param}\n")
-            f.write(f"'Testing' loss: prob={l[0]}, durr={l[1]} \t 'Testing' Accuracy {a}")
+            f.write(f"'Testing' loss: prob={l[0]}, durr={l[1]} \t 'Testing' Accuracy {a}\n")
+            f.write(f"predictions for the start of the song:\n{pred_start}\n")
+            f.write(f"predictions for the end of the song:\n{pred_end}\n")
         
         current_model.save(current_path, f'{i+1}')
         voice_loader(current_path, data=np.array(pred_start), name="start")
