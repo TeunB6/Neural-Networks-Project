@@ -7,7 +7,7 @@ import numpy as np
 
 class GridSearch:
     """
-    Class implementing a gridsearch
+    Class implementing a gridsearch based on the loss
     """    
     def __init__(self, model, param_grid: dict, folds: int, verbose: int = 0) -> None:
         self.model_class = model
@@ -32,7 +32,7 @@ class GridSearch:
             for fold, (train_index, val_index) in enumerate(kFold.split(X, y)):                
                 X_train, X_val, y_train, y_val = (self.get_samples(X, train_index), self.get_samples(X, val_index),
                                                     self.get_samples(y, train_index), self.get_samples(y, val_index))
-                trial_model.fit(X_train, y_train)
+                trial_model.fit_ffn(X_train, y_train)
                 s = trial_model.score(X_val, y_val)
                 
                 if self.verbose > 2:

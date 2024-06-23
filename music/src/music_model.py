@@ -11,7 +11,7 @@ from src.utils.dataset import CustomDataset
 from typing import Optional
 
 class RNNModel(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, batch_size):
+    def __init__(self, input_size, hidden_size, num_layers, batch_size, init_range):
         super(RNNModel, self).__init__()
         self.hidden_size = hidden_size
         self.batch_size = batch_size
@@ -19,17 +19,17 @@ class RNNModel(nn.Module):
         self.device = fetch_device()
         self.num_layers = num_layers
         self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
-        self.init_weights(self.rnn)
+        self.init_weights(self.rnn, *init_range)
         
-    def init_weights(self, module: nn.Module):
-        """Initializes the weights of the provided module in [-0.5,0.5], resulting in the network likely possesing the echo state property.
+    def init_weights(self, module: nn.Module, min, max):
+        """Initializes the weights of the provided module in [min,max], resulting in the network likely possesing the echo state property.
 
         Args:
             module (nn.Module): the module whose parameters should be initialized.
         """        
         for param in module.parameters():
             if param.requires_grad:
-                nn.init.uniform_(param, a=-0.5, b=0.5)
+                nn.init.uniform_(param, min, max)
 
     
     def forward(self, x: torch.Tensor, h0: Optional[torch.Tensor] = None) -> tuple[torch.Tensor, torch.Tensor]:
@@ -53,17 +53,18 @@ class MusicModel:
     def __init__(self, prob_optimizer: Optimizer = SGD,
                        prob_optimizer_args: dict = {"lr" : 0.005, "momentum" : 0.9},
                        durr_optimizer: Optimizer = Adam,
-                       durr_optimizer_args: dict = {"lr" : 0.001},
-                       epochs: int = 30, 
+                       durr_optimizer_args: dict = {"lr" : 0.01},
+                       epochs: int = 20, 
                        hidden_size: int = 2048,
                        num_layers: int = 1,
                        batch_size: int = 1,
+                       init_range: tuple[int, int] = (-0.5, 0.5),
                        verbose: int = 0,
                        ) -> None:
         # Set up 
         
         self.device = fetch_device()
-        self.reservoir = RNNModel(INPUT_SIZE, hidden_size, num_layers, batch_size).to(self.device)
+        self.reservoir = RNNModel(INPUT_SIZE, hidden_size, num_layers, batch_size, init_range).to(self.device)
         self.prob_model = nn.Sequential(nn.Linear(hidden_size, hidden_size //2),
                                    nn.ReLU(),
                                    nn.Linear(hidden_size // 2, OUTPUT_SIZE),
@@ -189,7 +190,7 @@ class MusicModel:
             plt.show()
 
     
-    def score_ffn(self, X:np.ndarray, y:np.ndarray) -> tuple[float, float]:
+    def score_ffn(self, X:np.ndarray, y:np.ndarray) -> tuple[tuple[float, float], float]:
         """
         Evaluates the FFN based on the testing datasets provided.
 
@@ -198,7 +199,7 @@ class MusicModel:
             y (np.ndarray): Labels
 
         Returns:
-            tuple[float, float]: Tuple of mean loss and accuracy across the testing set.
+            tuple[float, float]: Tuple of mean losses and accuracy across the testing set.
         """        
         loss_history = []
         acc_history = []
@@ -206,8 +207,6 @@ class MusicModel:
         # Put models in evaluation mode
         self.prob_model.eval()
         self.durr_model.eval()
-        
-
         
         X = torch.tensor(np.array(X), dtype=torch.float32, device=self.device)
         y = torch.tensor(np.array(y), dtype=torch.float32, device=self.device)
@@ -228,8 +227,7 @@ class MusicModel:
                 # Calculate loss
                 prob_loss = self.prob_loss_function(out_prob, target_prob)
                 durr_loss = self.durr_loss_function(out_durr, target_durr)
-                total_loss = prob_loss + durr_loss            
-                loss_history.append(total_loss.item())
+                loss_history.append((prob_loss.item(), durr_loss.item()))
                 
                 # Calculate Accuracy
                 out_note = [one_hot_max(arr) for arr in out_prob.cpu().numpy()]
@@ -239,7 +237,7 @@ class MusicModel:
 
                             
             mean_acc = np.mean(acc_history)
-            mean_loss = np.mean(loss_history)
+            mean_loss = np.mean(loss_history, axis=0)
             if self.verbose > 0: 
                 print(f"Scored {len(X)} data points: mean loss of {mean_loss}, mean accuracy of {mean_acc}")
         return mean_loss, mean_acc
