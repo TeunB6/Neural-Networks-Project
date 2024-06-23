@@ -92,22 +92,22 @@ def grid_search(name: str) -> None:
         name (str): the name to save the gridsearch under
     """
     sequence = load_sequence()
-    gs_path = os.path.join(dir_path, f'gridsearch/{name}/')
+    gs_path = os.path.join(dir_path, f'gridsearch_raw/{name}/')
     if not os.path.exists(gs_path):
         os.mkdir(gs_path)
         
-    def get_combinations(param_grid: dict) -> list:
+    def get_combinations(param_grid: dict) -> list[dict]:
         return [dict(zip(param_grid.keys(), v)) for v in product(*param_grid.values())]
         
     # Generate list of all combinations to try  
-    optimizer_args_grid = {"lr" : [0.1,0.01,0.001,0.0001,0.00001], "weight_decay" : [0]}
+    optimizer_args_grid = {"lr" : [0.1,0.01,0.001,0.0001,0.00001], "weight_decay" : [0,0.1,0.01,1]}
     optimizer_combinations = get_combinations(optimizer_args_grid)
     param_grid = {"num_layers" : [1],
                   "hidden_size" : [128, 256, 512, 1024, 2048, 4096],
                   "batch_size" : [1],
                   "durr_optimizer" : [torch.optim.SGD, torch.optim.Adam],
                   "durr_optimizer_args" : optimizer_combinations,
-                  "init_range" : [(-0.5,0.5),(-1,1)]
+                  "init_range" : [(-0.5,0.5),(-1,1), (0,1)]
                   }
     
     voice_loader = VoiceLoader()
@@ -116,35 +116,50 @@ def grid_search(name: str) -> None:
         
     print(f"Running grid search on {num_combinations} combinations of {len(param_combinations[0])} parameters...")
     for i, param in enumerate(param_combinations):
-        # Initialize path and model
-        current_path = os.path.join(gs_path, f'{i+1}/')
-        current_model = MusicModel(**param)
-        os.mkdir(current_path)
-        print(f"Currently running {i+1}/{num_combinations}: {param}")
-        
-        # Collect Data
-        X, y = current_model.sample_reservoir(sequence)
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
-        
-        # Training Model
-        current_model.fit_ffn(X, y) # NOTE: SWAP THIS BACK TO TRAINING DATA
-        
-        # Score/predictions
-        l, a = current_model.score_ffn(X_test, y_test)
-        pred_start = current_model.predict(sequence[:50], 400)
-        pred_end = current_model.predict(sequence, 400)
-        
-        # Save results
-        with open(os.path.join(current_path, "summary.txt"), 'w') as f:
-            f.write(f"Parameters used:\n{param}\n")
-            f.write(f"'Testing' loss: prob={l[0]}, durr={l[1]} \t 'Testing' Accuracy {a}\n")
-            f.write(f"predictions for the start of the song:\n{pred_start}\n")
-            f.write(f"predictions for the end of the song:\n{pred_end}\n")
-        
-        current_model.save(current_path, f'{i+1}')
-        voice_loader(current_path, data=np.array(pred_start), name="start")
-        voice_loader(current_path, data=np.array(pred_end), name="end")
-        
+        try:
+            
+            if "durr_optimizer" in param.keys():
+                param["prob_optimizer"] = param["durr_optimizer"]
+                param["prob_optimizer_args"] = param["durr_optimizer_args"]
+            else:
+                param["durr_optimizer"] = param["prob_optimizer"]
+                param["durr_optimizer_args"] = param["prob_optimizer_args"]
+            
+            # Initialize path and model
+            current_path = os.path.join(gs_path, f'{i+1}/')
+            current_model = MusicModel(**param)
+            os.mkdir(current_path)
+            print(f"Currently running {i+1}/{num_combinations}: {param}")
+            
+            # Collect Data
+            X, y = current_model.sample_reservoir(sequence)
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
+            
+            # Training Model
+            current_model.fit_ffn(X, y) # NOTE: SWAP THIS BACK TO TRAINING DATA
+            
+            # Score/predictions
+            l, a = current_model.score_ffn(X_test, y_test)
+            
+            #NOTE: ADDED LOSS CRITERIUM HERE 
+            # Save results
+            with open(os.path.join(current_path, "summary.txt"), 'w') as f:
+                f.write(f"Parameters used:\n{param}\n")
+                f.write(f"'Testing' loss: prob={l[0]}, durr={l[1]} \t 'Testing' Accuracy {a}\n")
+                if l[1] < 10:
+                    pred_start = current_model.predict(sequence[:50], 400)
+                    pred_end = current_model.predict(sequence, 400)
+                    f.write(f"predictions for the start of the song:\n{pred_start}\n")
+                    f.write(f"predictions for the end of the song:\n{pred_end}\n")
+            if l[1] < 10:
+                current_model.save(current_path, f'{i+1}')
+                voice_loader(current_path, data=np.array(pred_start), name="start")
+                voice_loader(current_path, data=np.array(pred_end), name="end")
+        except KeyboardInterrupt as e:
+            raise e
+        except Exception as e:
+            print(e)
+            continue
                    
 
 def run_existing(name) -> None:
