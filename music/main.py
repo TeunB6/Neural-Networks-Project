@@ -100,14 +100,12 @@ def grid_search(name: str) -> None:
         return [dict(zip(param_grid.keys(), v)) for v in product(*param_grid.values())]
         
     # Generate list of all combinations to try  
-    optimizer_args_grid = {"lr" : [0.1,0.01,0.001,0.0001,0.00001], "weight_decay" : [0,0.1,0.01,1]}
-    optimizer_combinations = get_combinations(optimizer_args_grid)
-    param_grid = {"num_layers" : [1],
-                  "hidden_size" : [128, 256, 512, 1024, 2048, 4096],
-                  "batch_size" : [1],
-                  "durr_optimizer" : [torch.optim.SGD, torch.optim.Adam],
-                  "durr_optimizer_args" : optimizer_combinations,
-                  "init_range" : [(-0.5,0.5),(-1,1), (0,1)]
+    # optimizer_args_grid = {"lr" : [0.1,0.01,0.001,0.0001,0.00001], "weight_decay" : [0,0.1,0.01,1]}
+    # optimizer_combinations = get_combinations(optimizer_args_grid)
+    param_grid = {"hidden_size" : [256, 512, 1024, 2048],
+                  "spectral_radius" : [1.5, 1.3, 1.1, 0.9, 0.7, 0.5, -1],
+                  "density" : [1, 0.9, 0.5, 0.1, 0.01, 0.001],
+                  "leakage_rate" : [0.9, 0.5, 0.1, 0.01, 0.001]
                   }
     
     voice_loader = VoiceLoader()
@@ -121,7 +119,7 @@ def grid_search(name: str) -> None:
             if "durr_optimizer" in param.keys():
                 param["prob_optimizer"] = param["durr_optimizer"]
                 param["prob_optimizer_args"] = param["durr_optimizer_args"]
-            else:
+            elif "prob_optimizer" in param.keys():
                 param["durr_optimizer"] = param["prob_optimizer"]
                 param["durr_optimizer_args"] = param["prob_optimizer_args"]
             
@@ -139,8 +137,7 @@ def grid_search(name: str) -> None:
             current_model.fit_ffn(X, y) # NOTE: SWAP THIS BACK TO TRAINING DATA
             
             # Score/predictions
-            l, a = current_model.score_ffn(X_test, y_test)
-            
+            l, a = current_model.score_ffn(X_test, y_test)            
             #NOTE: ADDED LOSS CRITERIUM HERE 
             # Save results
             with open(os.path.join(current_path, "summary.txt"), 'w') as f:

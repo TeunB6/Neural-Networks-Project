@@ -9,8 +9,6 @@ from src.constants import INPUT_SIZE, OUTPUT_SIZE, WEIGHT_VECTOR
 from src.utils.device import fetch_device
 from src.utils.preprocess import one_hot_decode, one_hot_max
 from src.utils.dataset import CustomDataset
-from sklearn.metrics import accuracy_score
-from torch.nn.utils import clip_grad_norm_
 from typing import Optional
 
 class RNNModel(nn.Module):
@@ -38,12 +36,14 @@ class RNNModel(nn.Module):
         for param in module.parameters():
             if param.requires_grad:
                 nn.init.uniform_(param, min, max)
+                
         # Rescale hh weight matrices occording to the spectral radius
         for key, param in module.state_dict().items():
             if re.fullmatch(r"weight_hh_l[0-9]*", key):
                 # Compute the max of the absolute eigen values: current spectral radius
-                # abs_ev = torch.abs(torch.linalg.eigvals(param))
-                # param.data *= (spectral_radius / torch.max(abs_ev))
+                if spectral_radius > 0:
+                    abs_ev = torch.abs(torch.linalg.eigvals(param))
+                    param.data *= (spectral_radius / torch.max(abs_ev))
                 
                 if density < 1:
                     # get random indices to set to 0
@@ -70,19 +70,19 @@ class RNNModel(nn.Module):
                 h0 = (torch.zeros(self.num_layers, x.shape[0], self.hidden_size, device=self.device) if x.dim() > 2
                     else torch.zeros(self.num_layers, self.hidden_size, device=self.device))
             _, ht = self.rnn(x, h0)
-            ht = (1-self.leakage_rate)*h0 + self.leakage_rate*ht
+            ht = self.leakage_rate*h0 + (1-self.leakage_rate)*ht
         return ht[-1], ht        
 
 class MusicModel:  
     def __init__(self, prob_optimizer: Optimizer = Adam,
-                       prob_optimizer_args: dict = {"lr" : 0.001},
-                       durr_optimizer: Optimizer = Adam,
-                       durr_optimizer_args: dict = {"lr" : 0.001},
+                       prob_optimizer_args: dict = {"lr" : 0.0001},
+                       durr_optimizer: Optimizer = SGD,
+                       durr_optimizer_args: dict = {"lr" : 0.0001, "weight_decay" : 0.1},
                        epochs: int = 20, 
                        hidden_size: int = 256,
                        num_layers: int = 1,
-                       batch_size: int = 10,
-                       init_range: tuple[int, int] = (-0.5, 0.5),
+                       batch_size: int = 1,
+                       init_range: tuple[int, int] = (-1, 1),
                        spectral_radius: float = 1,
                        leakage_rate: float = 1,
                        density: float = 1,
@@ -94,12 +94,14 @@ class MusicModel:
         self.reservoir = RNNModel(INPUT_SIZE, hidden_size, num_layers, batch_size, init_range, spectral_radius, leakage_rate, density).to(self.device)
         #NOTE: Reminder that I added Batchnorm 1d here so now probably non of the old gridsearch models work, just comment it out ig
         self.prob_model = nn.Sequential(#nn.BatchNorm1d(hidden_size),
-                                        nn.Linear(hidden_size, hidden_size //2),
+                                        nn.Linear(hidden_size, hidden_size // 2),
                                         nn.ReLU(),
                                         nn.Linear(hidden_size // 2, OUTPUT_SIZE),
                                         nn.Sigmoid()).to(self.device)
         self.durr_model = nn.Sequential(#nn.BatchNorm1d(hidden_size),
-                                        nn.Linear(hidden_size, 1),
+                                        nn.Linear(hidden_size, hidden_size // 2),
+                                        nn.ReLU(),
+                                        nn.Linear(hidden_size // 2, 1),
                                         nn.ReLU()).to(self.device)
         
         
