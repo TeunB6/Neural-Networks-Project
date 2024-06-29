@@ -102,14 +102,8 @@ def grid_search(name: str) -> None:
     # Generate list of all combinations to try  
     optimizer_args_grid = {"lr" : [0.1,0.01,0.001,0.0001,0.00001], "weight_decay" : [0,0.1,0.01,1]}
     optimizer_combinations = get_combinations(optimizer_args_grid)
-    param_grid = {"hidden_size" : [256, 512, 1024],
-                  "spectral_radius" : [1.5, 0.9, 0.5, -1],
-                  "density" : [1, 0.9, 0.5, 0.1, 0.01],
-                  "leakage_rate" : [0.9, 0.5, 0.1, 0.01, 0.001, 0],
-                  "input_scaling" : [0.001, 0.01, 0.1, 1, 10],
-                #   "durr_optimizer" : [torch.optim.SGD],
-                #   "durr_optimizer_args" : optimizer_combinations,
-                #   "init_range" : [(-1,1), (0,1), (-0.5, 0.5)]
+    param_grid = {"durr_optimizer" : [torch.optim.SGD],
+                  "durr_optimizer_args" : optimizer_combinations
                   }
     
     voice_loader = VoiceLoader()
