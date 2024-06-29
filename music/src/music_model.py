@@ -89,11 +89,12 @@ class MusicModel:
                        leakage_rate: float = 1,
                        density: float = 1,
                        verbose: int = 0,
+                       input_scaling: float = 1,
                        ) -> None:
         # Set up 
         
         self.device = fetch_device()
-        self.reservoir = RNNModel(INPUT_SIZE, hidden_size, num_layers, batch_size, init_range, spectral_radius, leakage_rate, density).to(self.device)
+        self.reservoir = RNNModel(INPUT_SIZE, hidden_size, num_layers, batch_size, init_range, spectral_radius, leakage_rate, density, input_scaling).to(self.device)
         #NOTE: Reminder that I added Batchnorm 1d here so now probably non of the old gridsearch models work, just comment it out ig
         self.prob_model = nn.Sequential(#nn.BatchNorm1d(hidden_size),
                                         nn.Linear(hidden_size, hidden_size // 2),

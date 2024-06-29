@@ -100,12 +100,16 @@ def grid_search(name: str) -> None:
         return [dict(zip(param_grid.keys(), v)) for v in product(*param_grid.values())]
         
     # Generate list of all combinations to try  
-    # optimizer_args_grid = {"lr" : [0.1,0.01,0.001,0.0001,0.00001], "weight_decay" : [0,0.1,0.01,1]}
-    # optimizer_combinations = get_combinations(optimizer_args_grid)
-    param_grid = {"hidden_size" : [256, 512, 1024, 2048],
-                  "spectral_radius" : [1.5, 1.3, 1.1, 0.9, 0.7, 0.5, -1],
-                  "density" : [1, 0.9, 0.5, 0.1, 0.01, 0.001],
-                  "leakage_rate" : [0.9, 0.5, 0.1, 0.01, 0.001]
+    optimizer_args_grid = {"lr" : [0.1,0.01,0.001,0.0001,0.00001], "weight_decay" : [0,0.1,0.01,1]}
+    optimizer_combinations = get_combinations(optimizer_args_grid)
+    param_grid = {"hidden_size" : [256, 512, 1024],
+                  "spectral_radius" : [1.5, 0.9, 0.5, -1],
+                  "density" : [1, 0.9, 0.5, 0.1, 0.01],
+                  "leakage_rate" : [0.9, 0.5, 0.1, 0.01, 0.001, 0],
+                  "input_scaling" : [0.001, 0.01, 0.1, 1, 10],
+                #   "durr_optimizer" : [torch.optim.SGD],
+                #   "durr_optimizer_args" : optimizer_combinations,
+                #   "init_range" : [(-1,1), (0,1), (-0.5, 0.5)]
                   }
     
     voice_loader = VoiceLoader()
@@ -124,7 +128,7 @@ def grid_search(name: str) -> None:
                 param["durr_optimizer_args"] = param["prob_optimizer_args"]
             
             # Initialize path and model
-            current_path = os.path.join(gs_path, f'{i+1}/')
+            current_path = os.path.join(gs_path, f'{i+1}')
             os.mkdir(current_path)
             current_model = MusicModel(**param)
             print(f"Currently running {i+1}/{num_combinations}: {param}")
