@@ -125,16 +125,16 @@ def grid_search(name: str) -> None:
             
             # Initialize path and model
             current_path = os.path.join(gs_path, f'{i+1}/')
-            current_model = MusicModel(**param)
             os.mkdir(current_path)
+            current_model = MusicModel(**param)
             print(f"Currently running {i+1}/{num_combinations}: {param}")
             
             # Collect Data
             X, y = current_model.sample_reservoir(sequence)
-            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
+            X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
             
             # Training Model
-            current_model.fit_ffn(X, y) # NOTE: SWAP THIS BACK TO TRAINING DATA
+            current_model.fit_ffn(X_train, y_train) # NOTE: SWAP THIS BACK TO TRAINING DATA
             
             # Score/predictions
             l, a = current_model.score_ffn(X_test, y_test)            

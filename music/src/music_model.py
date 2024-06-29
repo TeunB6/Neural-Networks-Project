@@ -15,7 +15,7 @@ class RNNModel(nn.Module):
     def __init__(self, input_size: int, hidden_size: int, num_layers: int,
                  batch_size: int, init_range: tuple[float, float],
                  spectral_radius: float, leakage_rate: float,
-                 density: float):
+                 density: float, input_scaling: float):
         super(RNNModel, self).__init__()
         self.hidden_size = hidden_size
         self.batch_size = batch_size
@@ -24,9 +24,9 @@ class RNNModel(nn.Module):
         self.device = fetch_device()
         self.num_layers = num_layers
         self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
-        self.init_weights(self.rnn, *init_range, spectral_radius, density)
+        self.init_weights(self.rnn, *init_range, spectral_radius, density, input_scaling)
         
-    def init_weights(self, module: nn.Module, min, max, spectral_radius, density):
+    def init_weights(self, module: nn.Module, min, max, spectral_radius, density, input_scaling):
         """Initializes the weights of the provided module in [min,max], resulting in the network likely possesing the echo state property.
 
         Args:
@@ -39,19 +39,21 @@ class RNNModel(nn.Module):
                 
         # Rescale hh weight matrices occording to the spectral radius
         for key, param in module.state_dict().items():
+            if re.fullmatch(r"weight_ih_l[0-9]*", key):
+                param *= input_scaling
             if re.fullmatch(r"weight_hh_l[0-9]*", key):
-                # Compute the max of the absolute eigen values: current spectral radius
-                if spectral_radius > 0:
-                    abs_ev = torch.abs(torch.linalg.eigvals(param))
-                    param.data *= (spectral_radius / torch.max(abs_ev))
-                
+                # Set random weights to zero to conform with desired density
                 if density < 1:
-                    # get random indices to set to 0
                     zero_weights = torch.randperm(int(self.hidden_size*self.hidden_size))
                     zero_weights = zero_weights[:int(self.hidden_size * self.hidden_size * (1 - density))]
                     param_flat = param.view(-1)
                     param_flat[zero_weights] = 0
                     param = param_flat.view(param.shape)
+                
+                # Compute the max of the absolute eigen values: current spectral radius
+                if spectral_radius > 0:
+                    abs_ev = torch.abs(torch.linalg.eigvals(param))
+                    param.data *= (spectral_radius / torch.max(abs_ev))
                 
 
     
