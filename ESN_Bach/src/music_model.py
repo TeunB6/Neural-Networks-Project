@@ -80,13 +80,9 @@ class RNNModel(nn.Module):
 class MusicModel:  
     def __init__(self, prob_optimizer: Optimizer = SGD,
                        prob_optimizer_args: dict = {"lr" : 0.01},
-    def __init__(self, prob_optimizer: Optimizer = SGD,
-                       prob_optimizer_args: dict = {"lr" : 0.01},
                        durr_optimizer: Optimizer = SGD,
                        durr_optimizer_args: dict = {"lr" : 0.0001},
-                       durr_optimizer_args: dict = {"lr" : 0.0001},
                        epochs: int = 20, 
-                       hidden_size: int = 512,
                        hidden_size: int = 512,
                        num_layers: int = 1,
                        batch_size: int = 1,
