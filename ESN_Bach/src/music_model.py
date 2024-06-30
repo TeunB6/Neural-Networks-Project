@@ -11,6 +11,8 @@ from src.utils.preprocess import one_hot_decode, one_hot_max
 from src.utils.dataset import CustomDataset
 from typing import Optional
 
+plt.rcParams.update({'font.size': 28})
+
 class RNNModel(nn.Module):
     def __init__(self, input_size: int, hidden_size: int, num_layers: int,
                  batch_size: int, init_range: tuple[float, float],
@@ -78,16 +80,20 @@ class RNNModel(nn.Module):
 class MusicModel:  
     def __init__(self, prob_optimizer: Optimizer = SGD,
                        prob_optimizer_args: dict = {"lr" : 0.01},
+    def __init__(self, prob_optimizer: Optimizer = SGD,
+                       prob_optimizer_args: dict = {"lr" : 0.01},
                        durr_optimizer: Optimizer = SGD,
                        durr_optimizer_args: dict = {"lr" : 0.0001},
+                       durr_optimizer_args: dict = {"lr" : 0.0001},
                        epochs: int = 20, 
+                       hidden_size: int = 512,
                        hidden_size: int = 512,
                        num_layers: int = 1,
                        batch_size: int = 1,
                        init_range: tuple[int, int] = (-0.5, 0.5),
-                       spectral_radius: float = 1,
-                       leakage_rate: float = 1,
-                       density: float = 1,
+                       spectral_radius: float = -1,
+                       leakage_rate: float = 0,
+                       density: float = 0.5,
                        verbose: int = 0,
                        input_scaling: float = 1,
                        ) -> None:
@@ -214,11 +220,16 @@ class MusicModel:
         # Plot loss curve
         if self.verbose > 0:
             plt.figure()
+
             plot_data = np.array(loss_history)
             plt.subplot(121)
             plt.plot(plot_data[:, 0])
+            plt.xlabel("Epoch")
+            plt.ylabel("Key: Categorical Cross Entropy Loss")
             plt.subplot(122)
             plt.plot(plot_data[:, 1])
+            plt.xlabel("Epoch")
+            plt.ylabel("Durration: Mean Squared Error Loss")
             plt.show()
 
     
