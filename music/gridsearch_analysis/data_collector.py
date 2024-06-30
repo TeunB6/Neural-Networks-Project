@@ -32,8 +32,8 @@ def extract_numbers(file_content):
                 extracted_data[key] = float(match.group(1)) if '.' in match.group(1) or 'e' in match.group(1) else int(match.group(1))
             except ValueError:
                 extracted_data[key] = match.group(1)
-        else:
-            extracted_data[key] = None  # or some default value or handling
+        # else:
+        #     extracted_data[key] = None  # or some default value or handling
     
     return extracted_data
 

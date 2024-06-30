@@ -102,7 +102,9 @@ def grid_search(name: str) -> None:
     # Generate list of all combinations to try  
     optimizer_args_grid = {"lr" : [0.1,0.01,0.001,0.0001,0.00001], "weight_decay" : [0,0.1,0.01,1]}
     optimizer_combinations = get_combinations(optimizer_args_grid)
-    param_grid = {"durr_optimizer" : [torch.optim.SGD],
+    param_grid = {"hidden_size" : [256, 512, 1024],
+                  "init_range" : [(-1,1), (-0.5,0.5), (0, 1)],
+                  "durr_optimizer" : [torch.optim.SGD],
                   "durr_optimizer_args" : optimizer_combinations
                   }
     
