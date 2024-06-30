@@ -14,7 +14,7 @@ def extract_numbers(file_content):
         "weight_decay": r"'weight_decay':\s*([\d.]+)",
         "density": r"'density':\s*([\d.]+)",
         "leakage_rate": r"'leakage_rate':\s*([\d.]+)",
-        "spectral_radius": r"'spectral_radius':\s*([\d.]+)",
+        "spectral_radius": r"'spectral_radius':\s*([-\d.]+)",
         "init_range_start": r"'init_range':\s*\(([-\d.]+),",
         "init_range_end": r"'init_range':\s*\([-+\d.]+,\s*([-\d.]+)\)",
         "testing_loss_prob": r"'Testing' loss: prob=([\d.]+)",
