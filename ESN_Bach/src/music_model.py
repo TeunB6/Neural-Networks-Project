@@ -76,15 +76,15 @@ class RNNModel(nn.Module):
         return ht[-1], ht        
 
 class MusicModel:  
-    def __init__(self, prob_optimizer: Optimizer = Adam,
-                       prob_optimizer_args: dict = {"lr" : 0.0001},
+    def __init__(self, prob_optimizer: Optimizer = SGD,
+                       prob_optimizer_args: dict = {"lr" : 0.01},
                        durr_optimizer: Optimizer = SGD,
-                       durr_optimizer_args: dict = {"lr" : 0.0001, "weight_decay" : 0.1},
+                       durr_optimizer_args: dict = {"lr" : 0.0001},
                        epochs: int = 20, 
-                       hidden_size: int = 256,
+                       hidden_size: int = 512,
                        num_layers: int = 1,
                        batch_size: int = 1,
-                       init_range: tuple[int, int] = (-1, 1),
+                       init_range: tuple[int, int] = (-0.5, 0.5),
                        spectral_radius: float = 1,
                        leakage_rate: float = 1,
                        density: float = 1,
