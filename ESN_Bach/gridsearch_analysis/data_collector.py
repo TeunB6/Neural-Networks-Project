@@ -3,9 +3,12 @@ import csv
 import re
 import sys
 
+'''
+Never ask why this file is necessary, there is a story 
+'''
 
 def extract_numbers(file_content):
-    # Define regex patterns for each number
+    # Define regex patterns for each parameter
     patterns = {
         "hidden_size": r"'hidden_size':\s*(\d+)",
         "batch_size": r"'batch_size':\s*(\d+)",
@@ -15,11 +18,13 @@ def extract_numbers(file_content):
         "density": r"'density':\s*([\d.]+)",
         "leakage_rate": r"'leakage_rate':\s*([\d.]+)",
         "spectral_radius": r"'spectral_radius':\s*([-\d.]+)",
+        "input_scaling": r"'input_scaling':\s*([\d.]+)",
         "init_range_start": r"'init_range':\s*\(([-\d.]+),",
         "init_range_end": r"'init_range':\s*\([-+\d.]+,\s*([-\d.]+)\)",
         "testing_loss_prob": r"'Testing' loss: prob=([\d.]+)",
         "testing_loss_durr": r"'Testing' loss: prob=[\d.]+,\sdurr=([\d.]+)",
         "testing_accuracy": r"'Testing' Accuracy\s*([\d.]+)"
+    
     }
 
     extracted_data = {}

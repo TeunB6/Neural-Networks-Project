@@ -28,12 +28,18 @@ class RNNModel(nn.Module):
         self.rnn = nn.RNN(input_size, hidden_size, num_layers, batch_first=True)
         self.init_weights(self.rnn, *init_range, spectral_radius, density, input_scaling)
         
-    def init_weights(self, module: nn.Module, min, max, spectral_radius, density, input_scaling):
-        """Initializes the weights of the provided module in [min,max], resulting in the network likely possesing the echo state property.
+    def init_weights(self, module: nn.Module, min: float, max: float, spectral_radius: float, density: float, input_scaling: float):
+        """Initializes the weights of the provided module in [min,max], changing the spectral radius, density and implementing input_scaling, resulting in the network likely possesing the echo state property.
 
         Args:
             module (nn.Module): the module whose parameters should be initialized.
-        """
+            min (float): minimum value of uniform distribution for sampling weights
+            max (float): maximum value of uniform distribution for sampling weights
+            spectral_radius (float): desired spectral radius of the matrix
+            density (float): desired density of the matrix
+            input_scaling (float): scaling factor of the input weights
+        """        
+        
         # Initialize uniform distr   
         for param in module.parameters():
             if param.requires_grad:
@@ -41,6 +47,7 @@ class RNNModel(nn.Module):
                 
         # Rescale hh weight matrices occording to the spectral radius
         for key, param in module.state_dict().items():
+            # There has to be a better way to access specific weights than using regex right....    
             if re.fullmatch(r"weight_ih_l[0-9]*", key):
                 param *= input_scaling
             if re.fullmatch(r"weight_hh_l[0-9]*", key):
@@ -89,7 +96,7 @@ class MusicModel:
                        init_range: tuple[int, int] = (-0.5, 0.5),
                        spectral_radius: float = -1,
                        leakage_rate: float = 0,
-                       density: float = 0.5,
+                       density: float = 1,
                        verbose: int = 0,
                        input_scaling: float = 1,
                        ) -> None:
@@ -97,14 +104,11 @@ class MusicModel:
         
         self.device = fetch_device()
         self.reservoir = RNNModel(INPUT_SIZE, hidden_size, num_layers, batch_size, init_range, spectral_radius, leakage_rate, density, input_scaling).to(self.device)
-        #NOTE: Reminder that I added Batchnorm 1d here so now probably non of the old gridsearch models work, just comment it out ig
-        self.prob_model = nn.Sequential(#nn.BatchNorm1d(hidden_size),
-                                        nn.Linear(hidden_size, hidden_size // 2),
+        self.prob_model = nn.Sequential(nn.Linear(hidden_size, hidden_size // 2),
                                         nn.ReLU(),
                                         nn.Linear(hidden_size // 2, OUTPUT_SIZE),
                                         nn.Sigmoid()).to(self.device)
-        self.durr_model = nn.Sequential(#nn.BatchNorm1d(hidden_size),
-                                        nn.Linear(hidden_size, hidden_size // 2),
+        self.durr_model = nn.Sequential(nn.Linear(hidden_size, hidden_size // 2),
                                         nn.ReLU(),
                                         nn.Linear(hidden_size // 2, 1),
                                         nn.ReLU()).to(self.device)
@@ -262,7 +266,6 @@ class MusicModel:
                 # Compute probability and duration predictions
                 out_prob = self.prob_model.forward(data)
                 out_durr = self.durr_model.forward(data)
-                
                 # Calculate loss
                 prob_loss = self.prob_loss_function(out_prob, target_prob)
                 durr_loss = self.durr_loss_function(out_durr, target_durr)
@@ -329,7 +332,8 @@ class MusicModel:
                 
                 out_prob = self.prob_model.forward(sample)
                 out_durr = self.durr_model.forward(sample)
-                
+                print(out_durr, out_prob)
+
                 selected_note = self.select_note(out_prob)
                 output_list += [one_hot_decode(selected_note)] * int(out_durr + 1)
 

@@ -73,7 +73,7 @@ def train_new(name: str) -> None:
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.3)
     model.fit_ffn(X, y) # NOTE: SWAP THIS BACK
     
-    model.score_ffn(X_test, y_test)
+    model.score_ffn(X, y)
     
     model.save(save_path, name)
     
@@ -138,17 +138,16 @@ def grid_search(name: str) -> None:
             
             # Score/predictions
             l, a = current_model.score_ffn(X_test, y_test)            
-            #NOTE: ADDED LOSS CRITERIUM HERE 
             # Save results
             with open(os.path.join(current_path, "summary.txt"), 'w') as f:
                 f.write(f"Parameters used:\n{param}\n")
                 f.write(f"'Testing' loss: prob={l[0]}, durr={l[1]} \t 'Testing' Accuracy {a}\n")
-                if l[1] < 10:
+                if l[1] < 30: # Filter this out because if the duration is consistantly overshot by lets say 100 the txt file will become idiotically large
                     pred_start = current_model.predict(sequence[:50], 400)
                     pred_end = current_model.predict(sequence, 400)
                     f.write(f"predictions for the start of the song:\n{pred_start}\n")
                     f.write(f"predictions for the end of the song:\n{pred_end}\n")
-            if l[1] < 10:
+            if l[1] < 30: # Filter this out because if the duration is consistantly overshot by lets say 1000 you might see the error: Could not allocate 716 GiB Memory to np.array
                 current_model.save(current_path, f'{i+1}')
                 voice_loader(current_path, data=np.array(pred_start), name="start")
                 voice_loader(current_path, data=np.array(pred_end), name="end")
@@ -169,10 +168,6 @@ def run_existing(name) -> None:
     model = MusicModel()
     dir_path = os.path.dirname(os.path.realpath(__file__))
     model.load(os.path.join(dir_path, "models/"), name)
-
-    # X = np.concatenate((one_hot_encode(0), [5]))
-    # X = np.expand_dims(X, 0)
-    # pred = model.predict(X, 100)
     
     sequence = load_sequence()
     pred = model.predict(sequence, 100)

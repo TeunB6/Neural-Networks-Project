@@ -4,9 +4,8 @@ library(patchwork)
 
 # Load the dataset (assuming you've already loaded it somehow)
 gs <- read.csv(file.choose())
-analyse_parameter <- function(group, order) {
+analyse_parameter <- function(group) {
   group <- enquo(group)
-  order <- enquo(order)
   param <- gs %>%
     mutate(across(where(is.numeric) & !matches("loss") & !matches("acc"), as.factor)) %>%
     group_by(!!group) %>%
@@ -39,14 +38,18 @@ hidden.acc = analyse_min(hidden_size, -testing_accuracy)
 # gs$init_range = as.factor(paste(as.character(gs$init_range_start), as.character(gs$init_range_end)))
 
 # Analyze different parameters
-lr_durr <- analyse_parameter(learning_rate, testing_loss_durr)
-lr_prob <- analyse_parameter(learning_rate, testing_loss_prob)
-hidden_size_durr <- analyse_parameter(hidden_size, testing_loss_durr)
-hidden_size_prob <- analyse_parameter(hidden_size, testing_loss_prob)
-weight_decay_durr <- analyse_parameter(weight_decay, testing_loss_durr)
-weight_decay_prob <- analyse_parameter(weight_decay, testing_loss_prob)
-init_range_durr <- analyse_parameter(init_range, testing_loss_durr)
-init_range_prob <- analyse_parameter(init_range, testing_loss_prob)
+
+# lr.data <- analyse_parameter(learning_rate)
+# hidden.data <- analyse_parameter(hidden_size)
+# weight_decay.data <- analyse_parameter(weight_decay)
+# init_range.data <- analyse_parameter(init_range)
+
+hidden.data <- analyse_parameter(hidden_size)
+density.data <- analyse_parameter(density)
+leakage_rate.data <- analyse_parameter(leakage_rate)
+spectral_radius.data <- analyse_parameter(spectral_radius)
+input_scaling.data <- analyse_parameter(input_scaling) 
+
 
 # Function to generate plot
 generate_plot <- function(data, x_var, y_var, title, x_lab, y_lab, show_legend = FALSE) {
@@ -68,22 +71,26 @@ generate_plot <- function(data, x_var, y_var, title, x_lab, y_lab, show_legend =
 } 
 
 # Generate plots with correct column names and manage legend display
-plot1 <- generate_plot(lr_durr, "learning_rate", "mean_durr_loss", "Learning Rate vs Duration Loss", "Learning Rate", "Mean MSE Loss", show_legend = F)
-plot2 <- generate_plot(lr_prob, "learning_rate", "mean_prob_loss", "Learning Rate vs Key Loss", "Learning Rate", "Mean Cross Entropy Loss", show_legend = F)
-plot3 <- generate_plot(lr_prob, "learning_rate", "mean_acc", "Learning Rate vs Accuracy", "Learning Rate", "Mean Accuracy", show_legend = F)
+plot1 <- generate_plot(density.data, "density", "min_durr_loss", "Density vs Duration Loss", "Density", "min MSE Loss", show_legend = F)
+plot2 <- generate_plot(density.data, "density", "min_prob_loss", "Density vs Key Loss", "Density", "min Cross Entropy Loss", show_legend = F)
+plot3 <- generate_plot(density.data, "density", "max_acc", "Density vs Accuracy", "Density", "min Accuracy", show_legend = F)
 
-plot4 <- generate_plot(hidden_size_durr, "hidden_size", "mean_durr_loss", "Hidden Size vs Duration Loss", "Hidden Size", "Mean MSE Loss", show_legend = F)
-plot5 <- generate_plot(hidden_size_prob, "hidden_size", "mean_prob_loss", "Hidden Size vs Key Loss", "Hidden Size", "Mean Cross Entropy Loss",  show_legend = F)
-plot6 <- generate_plot(hidden_size_prob, "hidden_size", "mean_acc", "Hidden Size vs Accuracy", "Hidden Size", "Mean Accuracy", show_legend = F)
+plot4 <- generate_plot(hidden.data, "hidden_size", "min_durr_loss", "Hidden Size vs Duration Loss", "Hidden Size", "min MSE Loss", show_legend = F)
+plot5 <- generate_plot(hidden.data, "hidden_size", "min_prob_loss", "Hidden Size vs Key Loss", "Hidden Size", "min Cross Entropy Loss",  show_legend = F)
+plot6 <- generate_plot(hidden.data, "hidden_size", "max_acc", "Hidden Size vs Accuracy", "Hidden Size", "min Accuracy", show_legend = F)
 
-plot7 <- generate_plot(weight_decay_durr, "weight_decay", "mean_durr_loss", "Weight Decay vs Duration Loss", "Weight Decay", "Mean MSE Loss", show_legend = F)
-plot8 <- generate_plot(weight_decay_prob, "weight_decay", "mean_prob_loss", "Weight Decay vs Key Loss", "Weight Decay", "Mean Cross Entropy Loss", show_legend = F)
-plot9 <- generate_plot(weight_decay_prob, "weight_decay", "mean_acc", "Weight Decay vs Key Accuracy", "Weight Decay", "Mean Accuracy",  show_legend = F)
+plot7 <- generate_plot(leakage_rate.data, "leakage_rate", "min_durr_loss", "Leakage Rate vs Duration Loss", "Leakage Rate", "min MSE Loss", show_legend = F)
+plot8 <- generate_plot(leakage_rate.data, "leakage_rate", "min_prob_loss", "Leakage Rate vs Key Loss", "Leakage Rate", "min Cross Entropy Loss", show_legend = F)
+plot9 <- generate_plot(leakage_rate.data, "leakage_rate", "max_acc", "Leakage Rate vs Key Accuracy", "Leakage Rate", "min Accuracy",  show_legend = F)
 
-plot10 <- generate_plot(init_range_durr, "init_range", "mean_durr_loss", "Initialization Range vs Duration Loss", "Initialization Range", "Mean MSE Loss", show_legend = F)
-plot11 <- generate_plot(init_range_prob, "init_range", "mean_prob_loss", "Initialization Range vs Key Loss", "Initialization Range", "Mean Cross Entropy Loss", show_legend = T)
-plot12 <- generate_plot(init_range_prob, "init_range", "mean_acc", "Initialization Range vs Accuracy", "Initialization Range", "Mean Accuracy", show_legend = F)
+plot10 <- generate_plot(spectral_radius.data, "spectral_radius", "min_durr_loss", "Spectral Radius vs Duration Loss", "Spectral Radius", "min MSE Loss", show_legend = F)
+plot11 <- generate_plot(spectral_radius.data, "spectral_radius", "min_prob_loss", "Spectral Radius vs Key Loss", "Spectral Radius", "min Cross Entropy Loss", show_legend = T)
+plot12 <- generate_plot(spectral_radius.data, "spectral_radius", "max_acc", "Spectral Radius vs Accuracy", "Spectral Radius", "min Accuracy", show_legend = F)
+
+plot13 <- generate_plot(input_scaling.data, "input_scaling", "min_durr_loss", "Input Scaling vs Duration Loss", "Input Scaling", "min MSE Loss", show_legend = F)
+plot14 <- generate_plot(input_scaling.data, "input_scaling", "min_prob_loss", "Input Scaling vs Key Loss", "Input Scaling", "min Cross Entropy Loss", show_legend = T)
+plot15 <- generate_plot(input_scaling.data, "input_scaling", "max_acc", "Input Scaling vs Accuracy", "Input Scaling", "min Accuracy", show_legend = F)
 
 # Arrange plots in a grid using patchwork
-((plot1 | plot2 | plot3) / (plot4 | plot5 | plot6) / (plot7 | plot8 | plot9) / (plot10 | plot11 | plot12))
+((plot1 | plot2 | plot3) / (plot4 | plot5 | plot6) / (plot7 | plot8 | plot9) / (plot10 | plot11 | plot12) / (plot13 | plot14 | plot15))
 
